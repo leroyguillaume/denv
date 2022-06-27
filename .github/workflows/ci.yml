@@ -3,7 +3,6 @@ name: ci
 on:
   push:
     paths-ignore:
-      - .github/**
       - .gitignore
       - .pre-commit-config.yaml
       - commitlint.config.js
@@ -11,20 +10,13 @@ on:
       - README.md
 
 jobs:
-  ci:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
-
-      - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
 
       - name: Setup Node
         uses: actions/setup-node@v3
@@ -51,6 +43,26 @@ jobs:
 
       - name: Run pre-commit
         uses: pre-commit/action@v3.0.0
+
+  test:
+    strategy:
+      fail-fast: true
+      matrix:
+        os:
+          - macos-latest
+          - windows-latest
+          - ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
 
       - name: Run cargo test
         run: cargo test
