@@ -1,0 +1,56 @@
+---
+name: ci
+on:
+  push:
+    paths-ignore:
+      - .github/**
+      - .gitignore
+      - .pre-commit-config.yaml
+      - commitlint.config.js
+      - LICENSE
+      - README.md
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+
+      - name: Setup python
+        uses: actions/setup-python@v3
+
+      - name: Get npm cache directory
+        id: npm-cache-dir
+        run: |
+          echo "::set-output name=dir::$(npm config get cache)"
+
+      - name: Cache npm
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.npm-cache-dir.outputs.dir }}
+          key: ${{ runner.os }}-npm
+
+      - name: Install dependencies
+        run: npm install -g @commitlint/cli @commitlint/config-conventional
+
+      - name: Run commitlint
+        run: commitlint --from=HEAD^
+
+      - name: Run pre-commit
+        uses: pre-commit/action@v3.0.0
+
+      - name: Run cargo test
+        run: cargo test

@@ -1,0 +1,2 @@
+[workspace]
+members = ["denv_lib", "denv"]
