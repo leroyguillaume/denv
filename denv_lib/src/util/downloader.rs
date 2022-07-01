@@ -16,7 +16,7 @@ impl Display for DownloadError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Self::RequestProcessingFailed(err) => write!(f, "Unable to process request: {}", err),
-            Self::RequestFailed(status) => write!(f, "Server returned an error {}", status),
+            Self::RequestFailed(status) => write!(f, "Server sent an error {}", status),
             Self::WritingFailed(err) => {
                 write!(f, "Unable to write response content to file: {}", err)
             }
@@ -36,6 +36,7 @@ impl Downloader for DefaultDownloader {
         debug!("Processing GET request on {}", url);
         let mut resp = map_debug_err!(get(url), DownloadError::RequestProcessingFailed)?;
         let status = resp.status();
+        debug!("Server sent status code {}", status.as_u16());
         let size = map_debug_err!(resp.copy_to(&mut buf), DownloadError::WritingFailed)?;
         trace!("{} bytes written", size);
         if !status.is_success() {
@@ -87,7 +88,7 @@ mod test {
                 fn should_return_string() {
                     let err = get("http://google.fr/notfound").unwrap();
                     let status = err.status().as_u16();
-                    let expected = format!("Server returned an error {}", status);
+                    let expected = format!("Server sent an error {}", status);
                     let err = DownloadError::RequestFailed(status);
                     assert_eq!(err.to_string(), expected);
                 }
