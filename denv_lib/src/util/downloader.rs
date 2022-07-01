@@ -1,12 +1,15 @@
 use crate::*;
-use bytes::Bytes;
-use log::debug;
+use log::{debug, trace};
 use reqwest::{self, blocking::get};
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    io::{BufWriter, Write},
+};
 
 pub enum DownloadError {
     RequestProcessingFailed(reqwest::Error),
     RequestFailed(u16),
+    WritingFailed(reqwest::Error),
 }
 
 impl Display for DownloadError {
@@ -14,34 +17,50 @@ impl Display for DownloadError {
         match self {
             Self::RequestProcessingFailed(err) => write!(f, "Unable to process request: {}", err),
             Self::RequestFailed(status) => write!(f, "Server returned an error {}", status),
+            Self::WritingFailed(err) => {
+                write!(f, "Unable to write response content to file: {}", err)
+            }
         }
     }
 }
 
 pub trait Downloader {
-    fn download(&self, url: &str) -> Result<Bytes, DownloadError>;
+    fn download(&self, url: &str, out: &mut dyn Write) -> Result<(), DownloadError>;
 }
 
 pub struct DefaultDownloader;
 
 impl Downloader for DefaultDownloader {
-    fn download(&self, url: &str) -> Result<Bytes, DownloadError> {
+    fn download(&self, url: &str, out: &mut dyn Write) -> Result<(), DownloadError> {
+        let mut buf = BufWriter::new(out);
         debug!("Processing GET request on {}", url);
-        let resp = map_debug_err!(get(url), DownloadError::RequestProcessingFailed)?;
+        let mut resp = map_debug_err!(get(url), DownloadError::RequestProcessingFailed)?;
         let status = resp.status();
-        let content = map_debug_err!(resp.bytes(), |_| DownloadError::RequestFailed(
-            status.as_u16()
-        ))?;
+        let size = map_debug_err!(resp.copy_to(&mut buf), DownloadError::WritingFailed)?;
+        trace!("{} bytes written", size);
         if !status.is_success() {
             return debug_err!(Err(DownloadError::RequestFailed(status.as_u16())));
         }
-        Ok(content)
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::io;
+
+    struct WriteFailer;
+
+    impl Write for WriteFailer {
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from(io::ErrorKind::BrokenPipe))
+        }
+    }
 
     mod download_error {
         use super::*;
@@ -73,6 +92,22 @@ mod test {
                     assert_eq!(err.to_string(), expected);
                 }
             }
+
+            mod writing_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let mut out = WriteFailer;
+                    let err = get("https://google.fr")
+                        .unwrap()
+                        .copy_to(&mut out)
+                        .unwrap_err();
+                    let expected = format!("Unable to write response content to file: {}", err);
+                    let err = DownloadError::WritingFailed(err);
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
         }
     }
 
@@ -85,7 +120,8 @@ mod test {
             #[test]
             fn should_return_request_processing_failed_err() {
                 let url = "htpp://localhost:1234";
-                match DefaultDownloader.download(url) {
+                let mut out = vec![];
+                match DefaultDownloader.download(url, &mut out) {
                     Ok(_) => panic!("should fail"),
                     Err(DownloadError::RequestProcessingFailed(_)) => {}
                     Err(err) => panic!("{}", err),
@@ -95,8 +131,9 @@ mod test {
             #[test]
             fn should_return_request_failed_err() {
                 let url = "https://fr.archive.ubuntu.com/ubuntu2/";
+                let mut out = vec![];
                 let expected = get(url).unwrap();
-                match DefaultDownloader.download(url) {
+                match DefaultDownloader.download(url, &mut out) {
                     Ok(_) => panic!("should fail"),
                     Err(DownloadError::RequestFailed(status)) => {
                         assert_eq!(status, expected.status().as_u16());
@@ -106,11 +143,23 @@ mod test {
             }
 
             #[test]
-            fn should_return_bytes() {
+            fn should_return_writing_failed_err() {
                 let url = "http://fr.archive.ubuntu.com/ubuntu/";
-                let expected = get(url).unwrap();
-                match DefaultDownloader.download(url) {
-                    Ok(content) => assert_eq!(content, expected.bytes().unwrap()),
+                let mut out = WriteFailer;
+                match DefaultDownloader.download(url, &mut out) {
+                    Ok(_) => panic!("should fail"),
+                    Err(DownloadError::WritingFailed(_)) => {}
+                    Err(err) => panic!("{}", err),
+                }
+            }
+
+            #[test]
+            fn should_write_bytes_in_file() {
+                let url = "http://fr.archive.ubuntu.com/ubuntu/";
+                let mut out = vec![];
+                let expected = get(url).unwrap().text().unwrap();
+                match DefaultDownloader.download(url, &mut out) {
+                    Ok(_) => assert_eq!(String::from_utf8(out).unwrap(), expected),
                     Err(err) => panic!("{}", err),
                 }
             }

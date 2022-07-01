@@ -68,7 +68,6 @@ version = "0.1.0"
 name = "denv_lib"
 version = "0.1.0"
 dependencies = [
- "bytes",
  "home",
  "log",
  "reqwest",
