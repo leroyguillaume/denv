@@ -1,20 +1,8 @@
+use crate::*;
 use bytes::Bytes;
 use log::debug;
 use reqwest::{self, blocking::get, StatusCode};
 use std::fmt::{self, Display, Formatter};
-
-macro_rules! map_err {
-    ($call:expr, $map_err:expr) => {
-        match $call {
-            Ok(val) => Ok(val),
-            Err(err) => {
-                let err = $map_err(err);
-                debug!("{}", err);
-                Err(err)
-            }
-        }
-    };
-}
 
 pub enum DownloadError {
     ProcessingRequest(reqwest::Error),
@@ -45,13 +33,11 @@ pub struct DefaultDownloader;
 impl Downloader for DefaultDownloader {
     fn download(&self, url: &str) -> Result<Bytes, DownloadError> {
         debug!("Processing GET request on {}", url);
-        let resp = map_err!(get(url), DownloadError::ProcessingRequest)?;
+        let resp = map_debug_err!(get(url), DownloadError::ProcessingRequest)?;
         let status = resp.status();
-        let content = map_err!(resp.bytes(), |_| DownloadError::Http(status, None))?;
+        let content = map_debug_err!(resp.bytes(), |_| DownloadError::Http(status, None))?;
         if !status.is_success() {
-            let err = DownloadError::Http(status, Some(content));
-            debug!("{}", err);
-            return Err(err);
+            return debug_err!(Err(DownloadError::Http(status, Some(content))));
         }
         Ok(content)
     }
@@ -114,7 +100,7 @@ mod test {
 
             #[test]
             fn should_return_http_err() {
-                let url = "https://apt.releases.hashicorp.com/gpg2";
+                let url = "https://fr.archive.ubuntu.com/ubuntu2/";
                 let expected = get(url).unwrap();
                 match DefaultDownloader.download(url) {
                     Ok(_) => panic!("should fail"),
@@ -128,7 +114,7 @@ mod test {
 
             #[test]
             fn should_return_bytes() {
-                let url = "https://apt.releases.hashicorp.com/gpg";
+                let url = "http://fr.archive.ubuntu.com/ubuntu/";
                 let expected = get(url).unwrap();
                 match DefaultDownloader.download(url) {
                     Ok(content) => assert_eq!(content, expected.bytes().unwrap()),
