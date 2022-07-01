@@ -1,25 +1,19 @@
 use crate::*;
 use bytes::Bytes;
 use log::debug;
-use reqwest::{self, blocking::get, StatusCode};
+use reqwest::{self, blocking::get};
 use std::fmt::{self, Display, Formatter};
 
 pub enum DownloadError {
-    ProcessingRequest(reqwest::Error),
-    Http(StatusCode, Option<Bytes>),
+    RequestProcessingFailed(reqwest::Error),
+    RequestFailed(u16),
 }
 
 impl Display for DownloadError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::ProcessingRequest(err) => write!(f, "Unable to process request: {}", err),
-            Self::Http(status, content) => match content {
-                Some(content) => {
-                    let content = String::from_utf8_lossy(content);
-                    write!(f, "Server returned an error {}: {}", status, content)
-                }
-                None => write!(f, "Server returned an error {}", status),
-            },
+            Self::RequestProcessingFailed(err) => write!(f, "Unable to process request: {}", err),
+            Self::RequestFailed(status) => write!(f, "Server returned an error {}", status),
         }
     }
 }
@@ -33,11 +27,13 @@ pub struct DefaultDownloader;
 impl Downloader for DefaultDownloader {
     fn download(&self, url: &str) -> Result<Bytes, DownloadError> {
         debug!("Processing GET request on {}", url);
-        let resp = map_debug_err!(get(url), DownloadError::ProcessingRequest)?;
+        let resp = map_debug_err!(get(url), DownloadError::RequestProcessingFailed)?;
         let status = resp.status();
-        let content = map_debug_err!(resp.bytes(), |_| DownloadError::Http(status, None))?;
+        let content = map_debug_err!(resp.bytes(), |_| DownloadError::RequestFailed(
+            status.as_u16()
+        ))?;
         if !status.is_success() {
-            return debug_err!(Err(DownloadError::Http(status, Some(content))));
+            return debug_err!(Err(DownloadError::RequestFailed(status.as_u16())));
         }
         Ok(content)
     }
@@ -53,29 +49,27 @@ mod test {
         mod to_string {
             use super::*;
 
-            mod processing_request {
+            mod request_processing_failed {
                 use super::*;
 
                 #[test]
                 fn should_return_string() {
                     let err = get("htpp://localhost:1234").unwrap_err();
                     let expected = format!("Unable to process request: {}", err);
-                    let err = DownloadError::ProcessingRequest(err);
+                    let err = DownloadError::RequestProcessingFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
 
-            mod http {
+            mod request_failed {
                 use super::*;
 
                 #[test]
                 fn should_return_string() {
                     let err = get("http://google.fr/notfound").unwrap();
-                    let status = err.status();
-                    let bytes = err.bytes().unwrap();
-                    let content = String::from_utf8_lossy(&bytes);
-                    let expected = format!("Server returned an error {}: {}", status, content);
-                    let err = DownloadError::Http(status, Some(bytes));
+                    let status = err.status().as_u16();
+                    let expected = format!("Server returned an error {}", status);
+                    let err = DownloadError::RequestFailed(status);
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -89,24 +83,23 @@ mod test {
             use super::*;
 
             #[test]
-            fn should_return_processing_request_err() {
+            fn should_return_request_processing_failed_err() {
                 let url = "htpp://localhost:1234";
                 match DefaultDownloader.download(url) {
                     Ok(_) => panic!("should fail"),
-                    Err(DownloadError::ProcessingRequest(_)) => {}
+                    Err(DownloadError::RequestProcessingFailed(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
 
             #[test]
-            fn should_return_http_err() {
+            fn should_return_request_failed_err() {
                 let url = "https://fr.archive.ubuntu.com/ubuntu2/";
                 let expected = get(url).unwrap();
                 match DefaultDownloader.download(url) {
                     Ok(_) => panic!("should fail"),
-                    Err(DownloadError::Http(status, content)) => {
-                        assert_eq!(status, expected.status());
-                        assert_eq!(content, Some(expected.bytes().unwrap()));
+                    Err(DownloadError::RequestFailed(status)) => {
+                        assert_eq!(status, expected.status().as_u16());
                     }
                     Err(err) => panic!("{}", err),
                 }
