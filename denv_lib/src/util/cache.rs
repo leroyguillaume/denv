@@ -5,14 +5,22 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub struct Cache(PathBuf);
+pub trait Cache {
+    fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<()>;
 
-impl Cache {
+    fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf;
+}
+
+pub struct DefaultCache(PathBuf);
+
+impl DefaultCache {
     pub fn new(path: &Path) -> Self {
         Self(path.into())
     }
+}
 
-    pub fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<()> {
+impl Cache for DefaultCache {
+    fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<()> {
         let path = self.tool_dirpath(name, version);
         if path.is_dir() {
             debug!("Directory {} already exists", path.display());
@@ -29,7 +37,7 @@ impl Cache {
         }
     }
 
-    pub fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf {
+    fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf {
         self.0.join(name).join(version)
     }
 }
@@ -40,7 +48,7 @@ mod test {
     use std::fs::write;
     use tempfile::tempdir;
 
-    mod cache {
+    mod default_cache {
         use super::*;
 
         mod new {
@@ -49,7 +57,7 @@ mod test {
             #[test]
             fn should_return_cache() {
                 let expected = tempdir().unwrap().into_path();
-                let cache = Cache::new(&expected);
+                let cache = DefaultCache::new(&expected);
                 assert_eq!(cache.0, expected);
             }
         }
@@ -63,7 +71,7 @@ mod test {
                 let version = "1.2.3";
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let path = tmp_dirpath.join(name).join(version);
-                let cache = Cache::new(&tmp_dirpath);
+                let cache = DefaultCache::new(&tmp_dirpath);
                 create_dir_all(path.parent().unwrap()).unwrap();
                 write(path, "").unwrap();
                 if cache.ensure_tool_dir(name, version).is_ok() {
@@ -77,7 +85,7 @@ mod test {
                 let version = "1.2.3";
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let path = tmp_dirpath.join(name).join(version);
-                let cache = Cache::new(&tmp_dirpath);
+                let cache = DefaultCache::new(&tmp_dirpath);
                 create_dir_all(path).unwrap();
                 cache.ensure_tool_dir(name, version).unwrap();
             }
@@ -88,7 +96,7 @@ mod test {
                 let version = "1.2.3";
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let path = tmp_dirpath.join(name).join(version);
-                let cache = Cache::new(&tmp_dirpath);
+                let cache = DefaultCache::new(&tmp_dirpath);
                 cache.ensure_tool_dir(name, version).unwrap();
                 assert!(path.is_dir());
             }
@@ -103,7 +111,7 @@ mod test {
                 let version = "1.2.3";
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let expected = tmp_dirpath.join(name).join(version);
-                let cache = Cache::new(&tmp_dirpath);
+                let cache = DefaultCache::new(&tmp_dirpath);
                 assert_eq!(cache.tool_dirpath(name, version), expected);
             }
         }
