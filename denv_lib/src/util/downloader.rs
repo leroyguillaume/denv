@@ -6,6 +6,7 @@ use std::{
     io::{BufWriter, Write},
 };
 
+#[derive(Debug)]
 pub enum DownloadError {
     RequestProcessingFailed(reqwest::Error),
     RequestFailed(u16, String),

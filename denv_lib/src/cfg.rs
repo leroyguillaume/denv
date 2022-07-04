@@ -2,9 +2,9 @@ use crate::util::{downloader::*, fs::*, zip::*};
 use std::{env::temp_dir, path::Path};
 
 pub struct Config {
-    fs: Box<dyn Fs>,
-    downloader: Box<dyn Downloader>,
-    unziper: Box<dyn Unziper>,
+    pub(crate) fs: Box<dyn Fs>,
+    pub(crate) downloader: Box<dyn Downloader>,
+    pub(crate) unziper: Box<dyn Unziper>,
 }
 
 impl Config {
@@ -14,18 +14,6 @@ impl Config {
             downloader: Box::new(DefaultDownloader),
             unziper: Box::new(DefaultUnziper),
         }
-    }
-
-    pub fn downloader(&self) -> &dyn Downloader {
-        self.downloader.as_ref()
-    }
-
-    pub fn fs(&self) -> &dyn Fs {
-        self.fs.as_ref()
-    }
-
-    pub fn unziper(&self) -> &dyn Unziper {
-        self.unziper.as_ref()
     }
 }
 

@@ -1,3 +1,5 @@
+pub mod terraform;
+
 use crate::{cfg::Config, util::downloader::*, util::zip::*};
 use std::{
     collections::{HashMap, HashSet},
@@ -6,8 +8,16 @@ use std::{
     io,
 };
 
+macro_rules! supported_systems {
+    ($(($os:expr, $($arch:expr),+)),+) => {{
+        HashMap::from([$(($os, HashSet::from([$($arch),*]))),*])
+    }};
+}
+pub(crate) use supported_systems;
+
 pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
 
+#[derive(Debug)]
 pub enum InstallError {
     UnsupportedOs(SupportedSystems),
     UnsupportedArch(SupportedSystems),
@@ -70,12 +80,6 @@ pub trait Tool {
 #[cfg(test)]
 mod test {
     use super::*;
-
-    macro_rules! supported_systems {
-        ($(($os:expr, $($arch:expr),+)),+) => {{
-            HashMap::from([$(($os, HashSet::from([$($arch),*]))),*])
-        }};
-    }
 
     mod install_error {
         use super::*;
