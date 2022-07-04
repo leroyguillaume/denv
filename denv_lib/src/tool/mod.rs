@@ -1,4 +1,6 @@
-use crate::cfg::Config;
+pub mod terraform;
+
+use crate::{cfg::Config, util::downloader::*};
 use std::{
     collections::{HashMap, HashSet},
     env::consts::{ARCH, OS},
@@ -6,12 +8,32 @@ use std::{
     io,
 };
 
+macro_rules! map_env_const {
+    ($const:ident, $(($src:expr, $tgt:expr)),+) => {
+        match std::env::consts::$const {
+            $(
+                $src => $tgt,
+            )*
+            _ => unreachable!()
+        }
+    };
+}
+pub(crate) use map_env_const;
+
+macro_rules! supported_systems {
+    ($(($os:expr, $($arch:expr),+)),+) => {{
+        HashMap::from([$(($os, HashSet::from([$($arch),*]))),*])
+    }};
+}
+pub(crate) use supported_systems;
+
 pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
 
 pub enum InstallError {
     UnsupportedOs(SupportedSystems),
     UnsupportedArch(SupportedSystems),
     IoFailed(io::Error),
+    DownloadFailed(DownloadError),
 }
 
 impl InstallError {
@@ -51,6 +73,7 @@ impl Display for InstallError {
                 self.fmt_supported_system(supported_systems)
             ),
             Self::IoFailed(err) => write!(f, "{}", err),
+            Self::DownloadFailed(err) => write!(f, "{}", err),
         }
     }
 }
@@ -66,12 +89,6 @@ pub trait Tool {
 #[cfg(test)]
 mod test {
     use super::*;
-
-    macro_rules! supported_systems {
-        ($(($os:expr, $($arch:expr),+)),+) => {{
-            HashMap::from([$(($os, HashSet::from([$($arch),*]))),*])
-        }};
-    }
 
     mod install_error {
         use super::*;
@@ -113,6 +130,18 @@ mod test {
                     let err = io::Error::from(io::ErrorKind::PermissionDenied);
                     let expected = err.to_string();
                     let err = InstallError::IoFailed(err);
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
+
+            mod download_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let err = DownloadError::RequestFailed(404, "not found".into());
+                    let expected = err.to_string();
+                    let err = InstallError::DownloadFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }

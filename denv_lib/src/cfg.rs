@@ -2,8 +2,8 @@ use crate::util::{cache::*, downloader::*};
 use std::path::Path;
 
 pub struct Config {
-    cache: Box<dyn Cache>,
-    downloader: Box<dyn Downloader>,
+    pub(crate) cache: Box<dyn Cache>,
+    pub(crate) downloader: Box<dyn Downloader>,
 }
 
 impl Config {
