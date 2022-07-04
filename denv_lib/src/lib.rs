@@ -30,4 +30,5 @@ macro_rules! map_debug_err {
 pub(crate) use map_debug_err;
 
 pub mod cfg;
+pub mod tool;
 pub mod util;
