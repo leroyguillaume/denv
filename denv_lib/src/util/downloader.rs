@@ -8,7 +8,7 @@ use std::{
 
 pub enum DownloadError {
     RequestProcessingFailed(reqwest::Error),
-    RequestFailed(u16),
+    RequestFailed(u16, String),
     WritingFailed(reqwest::Error),
 }
 
@@ -16,7 +16,9 @@ impl Display for DownloadError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Self::RequestProcessingFailed(err) => write!(f, "Unable to process request: {}", err),
-            Self::RequestFailed(status) => write!(f, "Server sent an error {}", status),
+            Self::RequestFailed(status, content) => {
+                write!(f, "Server sent an error {}: {}", status, content)
+            }
             Self::WritingFailed(err) => {
                 write!(f, "Unable to write response content to file: {}", err)
             }
@@ -37,11 +39,12 @@ impl Downloader for DefaultDownloader {
         let mut resp = map_debug_err!(get(url), DownloadError::RequestProcessingFailed)?;
         let status = resp.status();
         debug!("Server sent status code {}", status.as_u16());
+        if !status.is_success() {
+            let content = resp.text().unwrap_or_default();
+            return debug_err!(Err(DownloadError::RequestFailed(status.as_u16(), content)));
+        }
         let size = map_debug_err!(resp.copy_to(&mut buf), DownloadError::WritingFailed)?;
         trace!("{} bytes written", size);
-        if !status.is_success() {
-            return debug_err!(Err(DownloadError::RequestFailed(status.as_u16())));
-        }
         Ok(())
     }
 }
@@ -86,10 +89,11 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let err = get("http://google.fr/notfound").unwrap();
-                    let status = err.status().as_u16();
-                    let expected = format!("Server sent an error {}", status);
-                    let err = DownloadError::RequestFailed(status);
+                    let resp = get("https://fr.archive.ubuntu.com/ubuntu2/").unwrap();
+                    let status = resp.status().as_u16();
+                    let content = resp.text().unwrap();
+                    let expected = format!("Server sent an error {}: {}", status, content);
+                    let err = DownloadError::RequestFailed(status, content);
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -136,8 +140,10 @@ mod test {
                 let expected = get(url).unwrap();
                 match DefaultDownloader.download(url, &mut out) {
                     Ok(_) => panic!("should fail"),
-                    Err(DownloadError::RequestFailed(status)) => {
+                    Err(DownloadError::RequestFailed(status, content)) => {
                         assert_eq!(status, expected.status().as_u16());
+                        assert_eq!(content, expected.text().unwrap());
+                        assert!(out.is_empty());
                     }
                     Err(err) => panic!("{}", err),
                 }
