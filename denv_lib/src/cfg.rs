@@ -1,21 +1,25 @@
-use home::home_dir;
-use std::path::PathBuf;
+use crate::util::{cache::*, downloader::*};
+use std::path::Path;
 
-#[derive(Debug)]
-pub struct HomeNotFoundError;
-
-#[derive(Debug, Eq, PartialEq)]
 pub struct Config {
-    denv_dirpath: PathBuf,
+    cache: Box<dyn Cache>,
+    downloader: Box<dyn Downloader>,
 }
 
 impl Config {
-    pub fn new() -> Result<Self, HomeNotFoundError> {
-        Ok(Self {
-            denv_dirpath: home_dir()
-                .map(|path| path.join(".denv"))
-                .ok_or(HomeNotFoundError)?,
-        })
+    pub fn new(home_dirpath: &Path) -> Self {
+        Self {
+            cache: Box::new(DefaultCache::new(home_dirpath)),
+            downloader: Box::new(DefaultDownloader),
+        }
+    }
+
+    pub fn cache(&self) -> &dyn Cache {
+        self.cache.as_ref()
+    }
+
+    pub fn downloader(&self) -> &dyn Downloader {
+        self.downloader.as_ref()
     }
 }
 
@@ -30,12 +34,10 @@ mod test {
             use super::*;
 
             #[test]
-            fn should_return_config() {
-                let expected = Config {
-                    denv_dirpath: home_dir().map(|path| path.join(".denv")).unwrap(),
-                };
-                let cfg = Config::new().unwrap();
-                assert_eq!(cfg, expected);
+            fn should_return_cfg() {
+                let home_dirpath = Path::new("/");
+                let cfg = Config::new(home_dirpath);
+                assert_eq!(cfg.cache.path(), home_dirpath);
             }
         }
     }
