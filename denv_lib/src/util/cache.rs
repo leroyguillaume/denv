@@ -6,11 +6,9 @@ use std::{
 };
 
 pub trait Cache {
-    fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<()>;
+    fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<PathBuf>;
 
     fn path(&self) -> &Path;
-
-    fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf;
 }
 
 pub struct DefaultCache(PathBuf);
@@ -22,15 +20,15 @@ impl DefaultCache {
 }
 
 impl Cache for DefaultCache {
-    fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<()> {
-        let path = self.tool_dirpath(name, version);
+    fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<PathBuf> {
+        let path = self.0.join(name).join(version);
         if path.is_dir() {
             debug!("Directory {} already exists", path.display());
-            Ok(())
+            Ok(path)
         } else {
             debug!("Creating directory {}", path.display());
-            match create_dir_all(path) {
-                Ok(()) => Ok(()),
+            match create_dir_all(&path) {
+                Ok(()) => Ok(path),
                 Err(err) => {
                     debug!("Unable to create directory: {}", err);
                     Err(err)
@@ -41,10 +39,6 @@ impl Cache for DefaultCache {
 
     fn path(&self) -> &Path {
         &self.0
-    }
-
-    fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf {
-        self.0.join(name).join(version)
     }
 }
 
@@ -91,10 +85,11 @@ mod test {
                 let name = "terraform";
                 let version = "1.2.3";
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let path = tmp_dirpath.join(name).join(version);
+                let expected = tmp_dirpath.join(name).join(version);
                 let cache = DefaultCache::new(&tmp_dirpath);
-                create_dir_all(path).unwrap();
-                cache.ensure_tool_dir(name, version).unwrap();
+                create_dir_all(&expected).unwrap();
+                let path = cache.ensure_tool_dir(name, version).unwrap();
+                assert_eq!(path, expected);
             }
 
             #[test]
@@ -102,24 +97,11 @@ mod test {
                 let name = "terraform";
                 let version = "1.2.3";
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let path = tmp_dirpath.join(name).join(version);
-                let cache = DefaultCache::new(&tmp_dirpath);
-                cache.ensure_tool_dir(name, version).unwrap();
-                assert!(path.is_dir());
-            }
-        }
-
-        mod tool_dirpath {
-            use super::*;
-
-            #[test]
-            fn should_return_tool_dir() {
-                let name = "terraform";
-                let version = "1.2.3";
-                let tmp_dirpath = tempdir().unwrap().into_path();
                 let expected = tmp_dirpath.join(name).join(version);
                 let cache = DefaultCache::new(&tmp_dirpath);
-                assert_eq!(cache.tool_dirpath(name, version), expected);
+                let path = cache.ensure_tool_dir(name, version).unwrap();
+                assert!(expected.is_dir());
+                assert_eq!(path, expected);
             }
         }
     }
