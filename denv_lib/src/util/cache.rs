@@ -8,6 +8,8 @@ use std::{
 pub trait Cache {
     fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<()>;
 
+    fn path(&self) -> &Path;
+
     fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf;
 }
 
@@ -37,6 +39,10 @@ impl Cache for DefaultCache {
         }
     }
 
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
     fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf {
         self.0.join(name).join(version)
     }
@@ -59,6 +65,7 @@ mod test {
                 let expected = tempdir().unwrap().into_path();
                 let cache = DefaultCache::new(&expected);
                 assert_eq!(cache.0, expected);
+                assert_eq!(cache.path(), expected);
             }
         }
 
