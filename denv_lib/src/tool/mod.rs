@@ -1,4 +1,4 @@
-use crate::cfg::Config;
+use crate::{cfg::Config, util::downloader::*, util::zip::*};
 use std::{
     collections::{HashMap, HashSet},
     env::consts::{ARCH, OS},
@@ -12,6 +12,8 @@ pub enum InstallError {
     UnsupportedOs(SupportedSystems),
     UnsupportedArch(SupportedSystems),
     IoFailed(io::Error),
+    DownloadFailed(DownloadError),
+    UnzipFailed(UnzipError),
 }
 
 impl InstallError {
@@ -51,6 +53,8 @@ impl Display for InstallError {
                 self.fmt_supported_system(supported_systems)
             ),
             Self::IoFailed(err) => write!(f, "{}", err),
+            Self::DownloadFailed(err) => write!(f, "{}", err),
+            Self::UnzipFailed(err) => write!(f, "{}", err),
         }
     }
 }
@@ -113,6 +117,31 @@ mod test {
                     let err = io::Error::from(io::ErrorKind::PermissionDenied);
                     let expected = err.to_string();
                     let err = InstallError::IoFailed(err);
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
+
+            mod download_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let err = DownloadError::RequestFailed(404, "not found".into());
+                    let expected = err.to_string();
+                    let err = InstallError::DownloadFailed(err);
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
+
+            mod unzip_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let err =
+                        UnzipError::IoFailed(io::Error::from(io::ErrorKind::PermissionDenied));
+                    let expected = err.to_string();
+                    let err = InstallError::UnzipFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
