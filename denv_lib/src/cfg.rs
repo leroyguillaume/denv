@@ -1,9 +1,10 @@
-use crate::util::{cache::*, downloader::*};
+use crate::util::{cache::*, downloader::*, zip::*};
 use std::path::Path;
 
 pub struct Config {
     cache: Box<dyn Cache>,
     downloader: Box<dyn Downloader>,
+    unziper: Box<dyn Unziper>,
 }
 
 impl Config {
@@ -11,6 +12,7 @@ impl Config {
         Self {
             cache: Box::new(DefaultCache::new(home_dirpath)),
             downloader: Box::new(DefaultDownloader),
+            unziper: Box::new(DefaultUnziper),
         }
     }
 
@@ -20,6 +22,10 @@ impl Config {
 
     pub fn downloader(&self) -> &dyn Downloader {
         self.downloader.as_ref()
+    }
+
+    pub fn unziper(&self) -> &dyn Unziper {
+        self.unziper.as_ref()
     }
 }
 
