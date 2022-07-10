@@ -2,8 +2,21 @@ use log::{debug, trace};
 use std::{
     fs::{create_dir_all, File, OpenOptions},
     io,
+    os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
+
+macro_rules! ensure_dir {
+    ($path:expr) => {
+        if $path.is_dir() {
+            debug!("Direction {} already exists", $path.display());
+            Ok(())
+        } else {
+            debug!("Creation directory {}", $path.display());
+            debug_err!(create_dir_all(&$path))
+        }
+    };
+}
 
 macro_rules! trace_open_file_w {
     ($filepath:expr) => {{
@@ -18,6 +31,8 @@ macro_rules! trace_open_file_w {
 
 pub trait Fs {
     fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)>;
+
+    fn create_bin_symlink(&self, name: &str, version: &str) -> io::Result<()>;
 
     fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)>;
 
@@ -38,18 +53,30 @@ impl DefaultFs {
             tmp_dirpath,
         }
     }
+
+    fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf {
+        self.root_dirpath.join("tools").join(name).join(version)
+    }
 }
 
 impl Fs for DefaultFs {
     fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)> {
-        let dirpath = self.root_dirpath.join("tools").join(name).join(version);
-        if dirpath.is_dir() {
-            debug!("Direction {} already exists", dirpath.display());
-        } else {
-            debug!("Creation directory {}", dirpath.display());
-            debug_err!(create_dir_all(&dirpath))?;
-        }
+        let dirpath = self.tool_dirpath(name, version);
+        ensure_dir!(dirpath)?;
         trace_open_file_w!(dirpath.join(name))
+    }
+
+    fn create_bin_symlink(&self, name: &str, version: &str) -> io::Result<()> {
+        let src_filepath = self.tool_dirpath(name, version).join(name);
+        let dest_dirpath = self.root_dirpath.join("bin");
+        ensure_dir!(dest_dirpath)?;
+        let dest_filepath = dest_dirpath.join(name);
+        debug!(
+            "Creating symlink from {} to {}",
+            src_filepath.display(),
+            dest_dirpath.display()
+        );
+        symlink(src_filepath, dest_filepath)
     }
 
     fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)> {
@@ -69,6 +96,7 @@ impl Fs for DefaultFs {
 #[derive(Default)]
 pub struct StubFs {
     create_bin_file_fn: Option<Box<CreateBinFileFn>>,
+    create_bin_symlink_fn: Option<Box<CreateBinSymlinkFn>>,
     create_tmp_file_fn: Option<Box<CreateTmpFileFn>>,
 }
 
@@ -86,6 +114,14 @@ impl StubFs {
         self
     }
 
+    pub fn with_create_bin_symlink_fn<F: Fn(&str, &str) -> io::Result<()> + 'static>(
+        mut self,
+        create_bin_symlink_fn: F,
+    ) -> Self {
+        self.create_bin_symlink_fn = Some(Box::new(create_bin_symlink_fn));
+        self
+    }
+
     pub fn with_create_tmp_file_fn<F: Fn(&str) -> io::Result<(PathBuf, File)> + 'static>(
         mut self,
         create_tmp_file_fn: F,
@@ -100,6 +136,13 @@ impl Fs for StubFs {
     fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)> {
         match &self.create_bin_file_fn {
             Some(create_bin_file_fn) => create_bin_file_fn(name, version),
+            None => unimplemented!(),
+        }
+    }
+
+    fn create_bin_symlink(&self, name: &str, version: &str) -> io::Result<()> {
+        match &self.create_bin_symlink_fn {
+            Some(create_bin_symlink_fn) => create_bin_symlink_fn(name, version),
             None => unimplemented!(),
         }
     }
@@ -124,12 +167,18 @@ impl Fs for StubFs {
 type CreateBinFileFn = dyn Fn(&str, &str) -> io::Result<(PathBuf, File)>;
 
 #[cfg(test)]
+type CreateBinSymlinkFn = dyn Fn(&str, &str) -> io::Result<()>;
+
+#[cfg(test)]
 type CreateTmpFileFn = dyn Fn(&str) -> io::Result<(PathBuf, File)>;
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::{fs::write, io::Write};
+    use std::{
+        fs::{read_link, write},
+        io::Write,
+    };
     use tempfile::tempdir;
 
     mod default_fs {
@@ -155,8 +204,8 @@ mod test {
             fn should_return_err() {
                 let root_dirpath = tempdir().unwrap().into_path().join("root");
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let fs = DefaultFs::new(root_dirpath.clone(), tmp_dirpath);
                 write(&root_dirpath, "").unwrap();
+                let fs = DefaultFs::new(root_dirpath, tmp_dirpath);
                 if fs.create_bin_file("terraform", "1.2.3").is_ok() {
                     panic!("should fail");
                 }
@@ -164,19 +213,55 @@ mod test {
 
             #[test]
             fn should_return_filepath_and_file() {
-                let root_dirpath = tempdir().unwrap().into_path();
-                let tmp_dirpath = tempdir().unwrap().into_path();
                 let name = "terraform";
                 let version = "1.2.3";
-                let fs = DefaultFs::new(root_dirpath.clone(), tmp_dirpath);
-                let (filepath, mut file) = fs.create_bin_file(name, version).unwrap();
+                let root_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
                 let expected = root_dirpath
                     .join("tools")
                     .join(name)
                     .join(version)
                     .join(name);
+                let fs = DefaultFs::new(root_dirpath, tmp_dirpath);
+                let (filepath, mut file) = fs.create_bin_file(name, version).unwrap();
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
+            }
+        }
+
+        mod create_bin_symlink {
+            use super::*;
+
+            #[test]
+            fn should_return_err() {
+                let name = "terraform";
+                let root_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
+                let filepath = root_dirpath.join("bin").join(name);
+                create_dir_all(filepath.parent().unwrap()).unwrap();
+                write(filepath, "").unwrap();
+                let fs = DefaultFs::new(root_dirpath, tmp_dirpath);
+                if fs.create_bin_symlink(name, "1.2.3").is_ok() {
+                    panic!("should fail");
+                }
+            }
+
+            #[test]
+            fn should_create_symlink() {
+                let name = "terraform";
+                let version = "1.2.3";
+                let root_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
+                let src_filepath = root_dirpath
+                    .join("tools")
+                    .join(name)
+                    .join(version)
+                    .join(name);
+                let dest_filepath = root_dirpath.join("bin").join(name);
+                let fs = DefaultFs::new(root_dirpath, tmp_dirpath);
+                fs.create_bin_symlink(name, version).unwrap();
+                assert!(dest_filepath.is_symlink());
+                assert_eq!(read_link(dest_filepath).unwrap(), src_filepath);
             }
         }
 
@@ -187,8 +272,8 @@ mod test {
             fn should_return_err() {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path().join("tmp");
-                let fs = DefaultFs::new(root_dirpath, tmp_dirpath.clone());
                 write(&tmp_dirpath, "").unwrap();
+                let fs = DefaultFs::new(root_dirpath, tmp_dirpath);
                 if fs.create_tmp_file("terraform-1.2.3.zip").is_ok() {
                     panic!("should fail");
                 }
@@ -199,9 +284,10 @@ mod test {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let filename = "terraform-1.2.3.zip";
-                let fs = DefaultFs::new(root_dirpath, tmp_dirpath.clone());
+                let expected = tmp_dirpath.join(filename);
+                let fs = DefaultFs::new(root_dirpath, tmp_dirpath);
                 let (filepath, mut file) = fs.create_tmp_file(filename).unwrap();
-                assert_eq!(filepath, tmp_dirpath.join(filename));
+                assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
             }
         }
