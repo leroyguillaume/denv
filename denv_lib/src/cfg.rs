@@ -28,23 +28,3 @@ impl Config {
         self.unziper.as_ref()
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    mod config {
-        use super::*;
-
-        mod new {
-            use super::*;
-
-            #[test]
-            fn should_return_cfg() {
-                let home_dirpath = Path::new("/");
-                let cfg = Config::new(home_dirpath);
-                assert_eq!(cfg.fs.root_dirpath(), home_dirpath);
-            }
-        }
-    }
-}
