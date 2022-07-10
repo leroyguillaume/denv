@@ -1,8 +1,8 @@
-use crate::util::{cache::*, downloader::*, zip::*};
+use crate::util::{downloader::*, fs::*, zip::*};
 use std::path::Path;
 
 pub struct Config {
-    cache: Box<dyn Cache>,
+    fs: Box<dyn Fs>,
     downloader: Box<dyn Downloader>,
     unziper: Box<dyn Unziper>,
 }
@@ -10,18 +10,18 @@ pub struct Config {
 impl Config {
     pub fn new(home_dirpath: &Path) -> Self {
         Self {
-            cache: Box::new(DefaultCache::new(home_dirpath)),
+            fs: Box::new(DefaultFs::new(home_dirpath)),
             downloader: Box::new(DefaultDownloader),
             unziper: Box::new(DefaultUnziper),
         }
     }
 
-    pub fn cache(&self) -> &dyn Cache {
-        self.cache.as_ref()
-    }
-
     pub fn downloader(&self) -> &dyn Downloader {
         self.downloader.as_ref()
+    }
+
+    pub fn fs(&self) -> &dyn Fs {
+        self.fs.as_ref()
     }
 
     pub fn unziper(&self) -> &dyn Unziper {
@@ -43,7 +43,7 @@ mod test {
             fn should_return_cfg() {
                 let home_dirpath = Path::new("/");
                 let cfg = Config::new(home_dirpath);
-                assert_eq!(cfg.cache.path(), home_dirpath);
+                assert_eq!(cfg.fs.root_dirpath(), home_dirpath);
             }
         }
     }

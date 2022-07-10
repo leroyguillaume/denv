@@ -5,21 +5,21 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub trait Cache {
+pub trait Fs {
     fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<PathBuf>;
 
-    fn path(&self) -> &Path;
+    fn root_dirpath(&self) -> &Path;
 }
 
-pub struct DefaultCache(PathBuf);
+pub struct DefaultFs(PathBuf);
 
-impl DefaultCache {
-    pub fn new(path: &Path) -> Self {
-        Self(path.into())
+impl DefaultFs {
+    pub fn new(root_dirpath: &Path) -> Self {
+        Self(root_dirpath.into())
     }
 }
 
-impl Cache for DefaultCache {
+impl Fs for DefaultFs {
     fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<PathBuf> {
         let path = self.0.join(name).join(version);
         if path.is_dir() {
@@ -37,22 +37,22 @@ impl Cache for DefaultCache {
         }
     }
 
-    fn path(&self) -> &Path {
+    fn root_dirpath(&self) -> &Path {
         &self.0
     }
 }
 
 #[cfg(test)]
-pub struct StubCache {
-    path: PathBuf,
+pub struct StubFs {
+    root_dirpath: PathBuf,
     ensure_tool_dir_fn: Option<Box<EnsureToolDirFn>>,
 }
 
 #[cfg(test)]
-impl StubCache {
-    pub fn new(path: &Path) -> Self {
+impl StubFs {
+    pub fn new(root_dirpath: &Path) -> Self {
         Self {
-            path: path.into(),
+            root_dirpath: root_dirpath.into(),
             ensure_tool_dir_fn: None,
         }
     }
@@ -67,7 +67,7 @@ impl StubCache {
 }
 
 #[cfg(test)]
-impl Cache for StubCache {
+impl Fs for StubFs {
     fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<PathBuf> {
         match &self.ensure_tool_dir_fn {
             Some(ensure_tool_dir_fn) => ensure_tool_dir_fn(name, version),
@@ -75,8 +75,8 @@ impl Cache for StubCache {
         }
     }
 
-    fn path(&self) -> &Path {
-        &self.path
+    fn root_dirpath(&self) -> &Path {
+        &self.root_dirpath
     }
 }
 
@@ -89,18 +89,18 @@ mod test {
     use std::fs::write;
     use tempfile::tempdir;
 
-    mod default_cache {
+    mod default_fs {
         use super::*;
 
         mod new {
             use super::*;
 
             #[test]
-            fn should_return_cache() {
+            fn should_return_fs() {
                 let expected = tempdir().unwrap().into_path();
-                let cache = DefaultCache::new(&expected);
-                assert_eq!(cache.0, expected);
-                assert_eq!(cache.path(), expected);
+                let fs = DefaultFs::new(&expected);
+                assert_eq!(fs.0, expected);
+                assert_eq!(fs.root_dirpath(), expected);
             }
         }
 
@@ -113,10 +113,10 @@ mod test {
                 let version = "1.2.3";
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let path = tmp_dirpath.join(name).join(version);
-                let cache = DefaultCache::new(&tmp_dirpath);
+                let fs = DefaultFs::new(&tmp_dirpath);
                 create_dir_all(path.parent().unwrap()).unwrap();
                 write(path, "").unwrap();
-                if cache.ensure_tool_dir(name, version).is_ok() {
+                if fs.ensure_tool_dir(name, version).is_ok() {
                     panic!("should fail");
                 }
             }
@@ -127,9 +127,9 @@ mod test {
                 let version = "1.2.3";
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let expected = tmp_dirpath.join(name).join(version);
-                let cache = DefaultCache::new(&tmp_dirpath);
+                let fs = DefaultFs::new(&tmp_dirpath);
                 create_dir_all(&expected).unwrap();
-                let path = cache.ensure_tool_dir(name, version).unwrap();
+                let path = fs.ensure_tool_dir(name, version).unwrap();
                 assert_eq!(path, expected);
             }
 
@@ -139,8 +139,8 @@ mod test {
                 let version = "1.2.3";
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let expected = tmp_dirpath.join(name).join(version);
-                let cache = DefaultCache::new(&tmp_dirpath);
-                let path = cache.ensure_tool_dir(name, version).unwrap();
+                let fs = DefaultFs::new(&tmp_dirpath);
+                let path = fs.ensure_tool_dir(name, version).unwrap();
                 assert!(expected.is_dir());
                 assert_eq!(path, expected);
             }
