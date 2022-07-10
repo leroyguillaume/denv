@@ -21,7 +21,6 @@ impl Terraform {
     fn os(&self) -> Result<&str, InstallError> {
         match OS {
             "macos" => Ok("darwin"),
-            "windows" => Ok("windows"),
             "linux" => Ok("linux"),
             _ => Err(InstallError::UnsupportedOs(self.supported_systems())),
         }
@@ -60,7 +59,6 @@ impl Tool for Terraform {
     fn supported_systems(&self) -> SupportedSystems {
         supported_systems!(
             ("macos", "x86_64", "aarch64"),
-            ("windows", "x86", "x86_64"),
             ("linux", "x86", "x86_64", "arm", "aarch64")
         )
     }
@@ -111,7 +109,6 @@ mod test {
             }
 
             should_return_os!("macos", "darwin");
-            should_return_os!("windows", "windows");
             should_return_os!("linux", "linux");
         }
 
@@ -268,8 +265,6 @@ mod test {
 
             tests!("macos", "x86_64");
             tests!("macos", "aarch64");
-            tests!("windows", "x86");
-            tests!("windows", "x86_64");
             tests!("linux", "x86");
             tests!("linux", "x86_64");
             tests!("linux", "arm");
