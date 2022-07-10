@@ -28,3 +28,14 @@ impl Config {
         self.unziper.as_ref()
     }
 }
+
+#[cfg(test)]
+impl Config {
+    pub fn stub(fs: StubFs, downloader: StubDownloader, unziper: StubUnziper) -> Self {
+        Self {
+            downloader: Box::new(downloader),
+            fs: Box::new(fs),
+            unziper: Box::new(unziper),
+        }
+    }
+}
