@@ -63,22 +63,16 @@ impl Fs for DefaultFs {
 }
 
 #[cfg(test)]
+#[derive(Default)]
 pub struct StubFs {
-    root_dirpath: PathBuf,
-    tmp_dirpath: PathBuf,
     create_tmp_file_fn: Option<Box<CreateTmpFileFn>>,
     ensure_tool_dir_fn: Option<Box<EnsureToolDirFn>>,
 }
 
 #[cfg(test)]
 impl StubFs {
-    pub fn new(root_dirpath: &Path, tmp_dirpath: &Path) -> Self {
-        Self {
-            root_dirpath: root_dirpath.into(),
-            tmp_dirpath: tmp_dirpath.into(),
-            create_tmp_file_fn: None,
-            ensure_tool_dir_fn: None,
-        }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn with_create_tmp_file_fn<F: Fn(&str) -> io::Result<File> + 'static>(
@@ -115,11 +109,11 @@ impl Fs for StubFs {
     }
 
     fn root_dirpath(&self) -> &Path {
-        &self.root_dirpath
+        Path::new("root")
     }
 
     fn tmp_dirpath(&self) -> &Path {
-        &self.tmp_dirpath
+        Path::new("tmp")
     }
 }
 
