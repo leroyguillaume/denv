@@ -8,14 +8,18 @@ use std::{
 macro_rules! trace_open_file_w {
     ($filepath:expr) => {{
         trace!("Opening {} in write mode", $filepath.display());
-        OpenOptions::new().create(true).write(true).open($filepath)
+        OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open($filepath)
+            .map(|file| ($filepath, file))
     }};
 }
 
 pub trait Fs {
-    fn create_bin_file(&self, tool_name: &str, version: &str) -> io::Result<File>;
+    fn create_bin_file(&self, tool_name: &str, version: &str) -> io::Result<(PathBuf, File)>;
 
-    fn create_tmp_file(&self, filename: &str) -> io::Result<File>;
+    fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)>;
 
     fn root_dirpath(&self) -> &Path;
 
@@ -37,7 +41,7 @@ impl DefaultFs {
 }
 
 impl Fs for DefaultFs {
-    fn create_bin_file(&self, tool_name: &str, version: &str) -> io::Result<File> {
+    fn create_bin_file(&self, tool_name: &str, version: &str) -> io::Result<(PathBuf, File)> {
         let dirpath = self
             .root_dirpath
             .join("tools")
@@ -52,7 +56,7 @@ impl Fs for DefaultFs {
         trace_open_file_w!(dirpath.join(tool_name))
     }
 
-    fn create_tmp_file(&self, filename: &str) -> io::Result<File> {
+    fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)> {
         trace_open_file_w!(self.tmp_dirpath.join(filename))
     }
 
@@ -78,7 +82,7 @@ impl StubFs {
         Self::default()
     }
 
-    pub fn with_create_bin_file_fn<F: Fn(&str, &str) -> io::Result<File> + 'static>(
+    pub fn with_create_bin_file_fn<F: Fn(&str, &str) -> io::Result<(PathBuf, File)> + 'static>(
         mut self,
         create_bin_file_fn: F,
     ) -> Self {
@@ -86,7 +90,7 @@ impl StubFs {
         self
     }
 
-    pub fn with_create_tmp_file_fn<F: Fn(&str) -> io::Result<File> + 'static>(
+    pub fn with_create_tmp_file_fn<F: Fn(&str) -> io::Result<(PathBuf, File)> + 'static>(
         mut self,
         create_tmp_file_fn: F,
     ) -> Self {
@@ -97,14 +101,14 @@ impl StubFs {
 
 #[cfg(test)]
 impl Fs for StubFs {
-    fn create_bin_file(&self, tool_name: &str, version: &str) -> io::Result<File> {
+    fn create_bin_file(&self, tool_name: &str, version: &str) -> io::Result<(PathBuf, File)> {
         match &self.create_bin_file_fn {
             Some(create_bin_file_fn) => create_bin_file_fn(tool_name, version),
             None => unimplemented!(),
         }
     }
 
-    fn create_tmp_file(&self, filename: &str) -> io::Result<File> {
+    fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)> {
         match &self.create_tmp_file_fn {
             Some(create_tmp_file_fn) => create_tmp_file_fn(filename),
             None => unimplemented!(),
@@ -121,10 +125,10 @@ impl Fs for StubFs {
 }
 
 #[cfg(test)]
-type CreateBinFileFn = dyn Fn(&str, &str) -> io::Result<File>;
+type CreateBinFileFn = dyn Fn(&str, &str) -> io::Result<(PathBuf, File)>;
 
 #[cfg(test)]
-type CreateTmpFileFn = dyn Fn(&str) -> io::Result<File>;
+type CreateTmpFileFn = dyn Fn(&str) -> io::Result<(PathBuf, File)>;
 
 #[cfg(test)]
 mod test {
@@ -163,11 +167,19 @@ mod test {
             }
 
             #[test]
-            fn should_return_file() {
+            fn should_return_filepath_and_file() {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
+                let tool_name = "terraform";
+                let version = "1.2.3";
                 let fs = DefaultFs::new(&root_dirpath, &tmp_dirpath);
-                let mut file = fs.create_bin_file("terraform", "1.2.3").unwrap();
+                let (filepath, mut file) = fs.create_bin_file(tool_name, version).unwrap();
+                let expected = root_dirpath
+                    .join("tools")
+                    .join(tool_name)
+                    .join(version)
+                    .join(tool_name);
+                assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
             }
         }
@@ -190,8 +202,10 @@ mod test {
             fn should_return_file() {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
+                let filename = "terraform-1.2.3.zip";
                 let fs = DefaultFs::new(&root_dirpath, &tmp_dirpath);
-                let mut file = fs.create_tmp_file("terraform-1.2.3.zip").unwrap();
+                let (filepath, mut file) = fs.create_tmp_file(filename).unwrap();
+                assert_eq!(filepath, tmp_dirpath.join(filename));
                 write!(file, "test").unwrap();
             }
         }
