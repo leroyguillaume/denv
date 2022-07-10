@@ -17,7 +17,7 @@ macro_rules! trace_open_file_w {
 }
 
 pub trait Fs {
-    fn create_bin_file(&self, tool_name: &str, version: &str) -> io::Result<(PathBuf, File)>;
+    fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)>;
 
     fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)>;
 
@@ -41,19 +41,15 @@ impl DefaultFs {
 }
 
 impl Fs for DefaultFs {
-    fn create_bin_file(&self, tool_name: &str, version: &str) -> io::Result<(PathBuf, File)> {
-        let dirpath = self
-            .root_dirpath
-            .join("tools")
-            .join(tool_name)
-            .join(version);
+    fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)> {
+        let dirpath = self.root_dirpath.join("tools").join(name).join(version);
         if dirpath.is_dir() {
             debug!("Direction {} already exists", dirpath.display());
         } else {
             debug!("Creation directory {}", dirpath.display());
             debug_err!(create_dir_all(&dirpath))?;
         }
-        trace_open_file_w!(dirpath.join(tool_name))
+        trace_open_file_w!(dirpath.join(name))
     }
 
     fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)> {
@@ -101,9 +97,9 @@ impl StubFs {
 
 #[cfg(test)]
 impl Fs for StubFs {
-    fn create_bin_file(&self, tool_name: &str, version: &str) -> io::Result<(PathBuf, File)> {
+    fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)> {
         match &self.create_bin_file_fn {
-            Some(create_bin_file_fn) => create_bin_file_fn(tool_name, version),
+            Some(create_bin_file_fn) => create_bin_file_fn(name, version),
             None => unimplemented!(),
         }
     }
@@ -170,15 +166,15 @@ mod test {
             fn should_return_filepath_and_file() {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let tool_name = "terraform";
+                let name = "terraform";
                 let version = "1.2.3";
                 let fs = DefaultFs::new(&root_dirpath, &tmp_dirpath);
-                let (filepath, mut file) = fs.create_bin_file(tool_name, version).unwrap();
+                let (filepath, mut file) = fs.create_bin_file(name, version).unwrap();
                 let expected = root_dirpath
                     .join("tools")
-                    .join(tool_name)
+                    .join(name)
                     .join(version)
-                    .join(tool_name);
+                    .join(name);
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
             }
