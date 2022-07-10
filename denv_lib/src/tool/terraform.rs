@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 use std::{
     env::consts::{ARCH, OS},
     io::BufWriter,
@@ -36,8 +35,10 @@ impl Tool for Terraform {
             "https://releases.hashicorp.com/terraform/{}/{}",
             version, filename
         );
-        let (zip_filepath, mut zip_file) =
-            map_debug_err!(cfg.fs.create_tmp_file(&filename), InstallError::IoFailed)?;
+        let (zip_filepath, mut zip_file) = cfg
+            .fs
+            .create_tmp_file(&filename)
+            .map_err(InstallError::IoFailed)?;
         cfg.downloader
             .download(&url, &mut zip_file)
             .map_err(InstallError::DownloadFailed)?;
@@ -49,7 +50,9 @@ impl Tool for Terraform {
         cfg.unziper
             .unzip(&zip_filepath, "terraform", &mut file_buf)
             .map_err(InstallError::UnzipFailed)?;
-        Ok(())
+        cfg.fs
+            .create_bin_symlink(self.name(), version)
+            .map_err(InstallError::IoFailed)
     }
 
     fn name(&self) -> &str {
@@ -116,7 +119,15 @@ mod test {
             use super::*;
 
             macro_rules! test {
-                ($ident:ident, $create_tmp_file:expr, $download:expr, $create_bin_file:expr, $unzip:expr, $expect:expr) => {
+                (
+                    $ident:ident,
+                    $create_tmp_file:expr,
+                    $download:expr,
+                    $create_bin_file:expr,
+                    $unzip:expr,
+                    $create_bin_symlink:expr,
+                    $expect:expr
+                ) => {
                     #[test]
                     fn $ident() {
                         let os = Terraform.os().unwrap();
@@ -137,6 +148,11 @@ mod test {
                                 assert_eq!(name, "terraform");
                                 assert_eq!(version, expected_version);
                                 $create_bin_file(&bin_filepath)
+                            })
+                            .with_create_bin_symlink_fn(move |name, version| {
+                                assert_eq!(name, "terraform");
+                                assert_eq!(version, expected_version);
+                                $create_bin_symlink()
                             });
                         let downloader = StubDownloader::new()
                             .with_download_fn(move |url, _| {
@@ -171,6 +187,7 @@ mod test {
                             File::create(bin_filepath)?
                         )),
                         || Ok(()),
+                        || Ok(()),
                         |res| {
                             match res {
                                 Ok(_) => panic!("should fail"),
@@ -193,6 +210,7 @@ mod test {
                             File::create(bin_filepath)?
                         )),
                         || Ok(()),
+                        || Ok(()),
                         |res| {
                             match res {
                                 Ok(_) => panic!("should fail"),
@@ -211,6 +229,7 @@ mod test {
                         )),
                         || Ok(()),
                         |_| Err(io::Error::from(io::ErrorKind::PermissionDenied)),
+                        || Ok(()),
                         || Ok(()),
                         |res| {
                             match res {
@@ -236,10 +255,34 @@ mod test {
                         || Err(UnzipError::IoFailed(io::Error::from(
                             io::ErrorKind::PermissionDenied
                         ))),
+                        || Ok(()),
                         |res| {
                             match res {
                                 Ok(_) => panic!("should fail"),
                                 Err(InstallError::UnzipFailed(_)) => {}
+                                Err(err) => panic!("{}", err),
+                            }
+                        }
+                    );
+
+                    #[cfg(all(target_os = $os, target_arch = $arch))]
+                    test!(
+                        should_return_io_failed_err_if_bin_symlink_creation_failed,
+                        |zip_filepath: &PathBuf| Ok((
+                            zip_filepath.clone(),
+                            File::create(zip_filepath)?
+                        )),
+                        || Ok(()),
+                        |bin_filepath: &PathBuf| Ok((
+                            bin_filepath.clone(),
+                            File::create(bin_filepath)?
+                        )),
+                        || Ok(()),
+                        || Err(io::Error::from(io::ErrorKind::PermissionDenied)),
+                        |res| {
+                            match res {
+                                Ok(_) => panic!("should fail"),
+                                Err(InstallError::IoFailed(_)) => {}
                                 Err(err) => panic!("{}", err),
                             }
                         }
@@ -257,6 +300,7 @@ mod test {
                             bin_filepath.clone(),
                             File::create(bin_filepath)?
                         )),
+                        || Ok(()),
                         || Ok(()),
                         |res: Result<(), InstallError>| res.unwrap()
                     );
