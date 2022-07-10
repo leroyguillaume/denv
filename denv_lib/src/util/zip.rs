@@ -52,6 +52,45 @@ impl Unziper for DefaultUnziper {
 }
 
 #[cfg(test)]
+#[derive(Default)]
+pub struct StubUnziper {
+    unzip_fn: Option<Box<UnzipFn>>,
+}
+
+#[cfg(test)]
+impl StubUnziper {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_unzip_fn<F: Fn(&Path, &str, &mut dyn Write) -> Result<(), UnzipError> + 'static>(
+        mut self,
+        unzip_fn: F,
+    ) -> Self {
+        self.unzip_fn = Some(Box::new(unzip_fn));
+        self
+    }
+}
+
+#[cfg(test)]
+impl Unziper for StubUnziper {
+    fn unzip(
+        &self,
+        zip_filepath: &Path,
+        filepath: &str,
+        dest: &mut dyn Write,
+    ) -> Result<(), UnzipError> {
+        match &self.unzip_fn {
+            Some(unzip_fn) => unzip_fn(zip_filepath, filepath, dest),
+            None => unimplemented!(),
+        }
+    }
+}
+
+#[cfg(test)]
+type UnzipFn = dyn Fn(&Path, &str, &mut dyn Write) -> Result<(), UnzipError>;
+
+#[cfg(test)]
 mod test {
     use super::*;
     use std::{

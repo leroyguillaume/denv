@@ -43,6 +43,47 @@ impl Cache for DefaultCache {
 }
 
 #[cfg(test)]
+pub struct StubCache {
+    path: PathBuf,
+    ensure_tool_dir_fn: Option<Box<EnsureToolDirFn>>,
+}
+
+#[cfg(test)]
+impl StubCache {
+    pub fn new(path: &Path) -> Self {
+        Self {
+            path: path.into(),
+            ensure_tool_dir_fn: None,
+        }
+    }
+
+    pub fn with_ensure_tool_dir_fn<F: Fn(&str, &str) -> io::Result<PathBuf> + 'static>(
+        mut self,
+        ensure_tool_dir_fn: F,
+    ) -> Self {
+        self.ensure_tool_dir_fn = Some(Box::new(ensure_tool_dir_fn));
+        self
+    }
+}
+
+#[cfg(test)]
+impl Cache for StubCache {
+    fn ensure_tool_dir(&self, name: &str, version: &str) -> io::Result<PathBuf> {
+        match &self.ensure_tool_dir_fn {
+            Some(ensure_tool_dir_fn) => ensure_tool_dir_fn(name, version),
+            None => unimplemented!(),
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+#[cfg(test)]
+type EnsureToolDirFn = dyn Fn(&str, &str) -> io::Result<PathBuf>;
+
+#[cfg(test)]
 mod test {
     use super::*;
     use std::fs::write;

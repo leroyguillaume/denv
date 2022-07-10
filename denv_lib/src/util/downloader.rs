@@ -50,6 +50,40 @@ impl Downloader for DefaultDownloader {
 }
 
 #[cfg(test)]
+#[derive(Default)]
+pub struct StubDownloader {
+    download_fn: Option<Box<DownloadFn>>,
+}
+
+#[cfg(test)]
+impl StubDownloader {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_download_fn<F: Fn(&str, &mut dyn Write) -> Result<(), DownloadError> + 'static>(
+        mut self,
+        download_fn: F,
+    ) -> Self {
+        self.download_fn = Some(Box::new(download_fn));
+        self
+    }
+}
+
+#[cfg(test)]
+impl Downloader for StubDownloader {
+    fn download(&self, url: &str, out: &mut dyn Write) -> Result<(), DownloadError> {
+        match &self.download_fn {
+            Some(download_fn) => download_fn(url, out),
+            None => unimplemented!(),
+        }
+    }
+}
+
+#[cfg(test)]
+type DownloadFn = dyn Fn(&str, &mut dyn Write) -> Result<(), DownloadError>;
+
+#[cfg(test)]
 mod test {
     use super::*;
     use std::io;
