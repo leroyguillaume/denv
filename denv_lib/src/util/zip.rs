@@ -97,7 +97,7 @@ mod test {
         env::temp_dir,
         fs::{create_dir_all, File},
     };
-    use tempfile::tempdir;
+    use tempfile::{tempdir, tempfile};
 
     mod unziper {
         use super::*;
@@ -136,6 +136,39 @@ mod test {
                 let filepath = Path::new("resources/tests/unziper/test.zip");
                 DefaultUnziper.unzip(filepath, "test", &mut out).unwrap();
                 assert_eq!(String::from_utf8(out).unwrap(), "test\n");
+            }
+        }
+    }
+
+    mod unzip_error {
+        use super::*;
+
+        mod to_string {
+            use super::*;
+
+            mod io_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let err = io::Error::from(io::ErrorKind::PermissionDenied);
+                    let expected = err.to_string();
+                    let err = UnzipError::IoFailed(err);
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
+
+            mod unzip_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let file = tempfile().unwrap();
+                    let err = ZipArchive::new(file).unwrap_err();
+                    let expected = err.to_string();
+                    let err = UnzipError::UnzipFailed(err);
+                    assert_eq!(err.to_string(), expected);
+                }
             }
         }
     }
