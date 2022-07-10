@@ -10,7 +10,7 @@ pub struct Config {
 impl Config {
     pub fn new(home_dirpath: &Path) -> Self {
         Self {
-            fs: Box::new(DefaultFs::new(home_dirpath, &temp_dir())),
+            fs: Box::new(DefaultFs::new(home_dirpath.to_path_buf(), temp_dir())),
             downloader: Box::new(DefaultDownloader),
             unziper: Box::new(DefaultUnziper),
         }

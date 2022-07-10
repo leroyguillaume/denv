@@ -32,10 +32,10 @@ pub struct DefaultFs {
 }
 
 impl DefaultFs {
-    pub fn new(root_dirpath: &Path, tmp_dirpath: &Path) -> Self {
+    pub fn new(root_dirpath: PathBuf, tmp_dirpath: PathBuf) -> Self {
         Self {
-            root_dirpath: root_dirpath.into(),
-            tmp_dirpath: tmp_dirpath.into(),
+            root_dirpath,
+            tmp_dirpath,
         }
     }
 }
@@ -142,7 +142,7 @@ mod test {
             fn should_return_fs() {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let fs = DefaultFs::new(&root_dirpath, &tmp_dirpath);
+                let fs = DefaultFs::new(root_dirpath.clone(), tmp_dirpath.clone());
                 assert_eq!(fs.root_dirpath(), root_dirpath);
                 assert_eq!(fs.tmp_dirpath(), tmp_dirpath);
             }
@@ -155,7 +155,7 @@ mod test {
             fn should_return_err() {
                 let root_dirpath = tempdir().unwrap().into_path().join("root");
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let fs = DefaultFs::new(&root_dirpath, &tmp_dirpath);
+                let fs = DefaultFs::new(root_dirpath.clone(), tmp_dirpath);
                 write(&root_dirpath, "").unwrap();
                 if fs.create_bin_file("terraform", "1.2.3").is_ok() {
                     panic!("should fail");
@@ -168,7 +168,7 @@ mod test {
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let name = "terraform";
                 let version = "1.2.3";
-                let fs = DefaultFs::new(&root_dirpath, &tmp_dirpath);
+                let fs = DefaultFs::new(root_dirpath.clone(), tmp_dirpath);
                 let (filepath, mut file) = fs.create_bin_file(name, version).unwrap();
                 let expected = root_dirpath
                     .join("tools")
@@ -187,7 +187,7 @@ mod test {
             fn should_return_err() {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path().join("tmp");
-                let fs = DefaultFs::new(&root_dirpath, &tmp_dirpath);
+                let fs = DefaultFs::new(root_dirpath, tmp_dirpath.clone());
                 write(&tmp_dirpath, "").unwrap();
                 if fs.create_tmp_file("terraform-1.2.3.zip").is_ok() {
                     panic!("should fail");
@@ -199,7 +199,7 @@ mod test {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let filename = "terraform-1.2.3.zip";
-                let fs = DefaultFs::new(&root_dirpath, &tmp_dirpath);
+                let fs = DefaultFs::new(root_dirpath, tmp_dirpath.clone());
                 let (filepath, mut file) = fs.create_tmp_file(filename).unwrap();
                 assert_eq!(filepath, tmp_dirpath.join(filename));
                 write!(file, "test").unwrap();
