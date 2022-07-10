@@ -133,7 +133,7 @@ mod test {
             #[test]
             fn should_extract_file() {
                 let mut out = vec![];
-                let filepath = Path::new("resources/test/test.zip");
+                let filepath = Path::new("resources/tests/unziper/test.zip");
                 DefaultUnziper.unzip(filepath, "test", &mut out).unwrap();
                 assert_eq!(String::from_utf8(out).unwrap(), "test\n");
             }

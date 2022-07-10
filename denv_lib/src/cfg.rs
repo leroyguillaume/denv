@@ -114,7 +114,7 @@ mod test {
                 ($ident:ident, $filename:expr, $expect:ident) => {
                     #[test]
                     fn $ident() {
-                        let filepath = format!("resources/test/config/{}.yml", $filename);
+                        let filepath = format!("resources/tests/config/{}.yml", $filename);
                         match Config::load(Path::new(&filepath)) {
                             Ok(_) => panic!("should fail"),
                             Err(LoadingError::$expect(_)) => {}
@@ -135,7 +135,7 @@ mod test {
             #[test]
             fn should_return_config() {
                 let expected = vec![ToolConfig::Terraform("1.2.3".into())];
-                let cfg = Config::load(Path::new("resources/test/config/denv.yml")).unwrap();
+                let cfg = Config::load(Path::new("resources/tests/config/denv.yml")).unwrap();
                 assert_eq!(cfg.tools(), expected);
             }
         }
