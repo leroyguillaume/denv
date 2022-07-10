@@ -1,5 +1,5 @@
 use crate::util::{downloader::*, fs::*, zip::*};
-use std::path::Path;
+use std::{env::temp_dir, path::Path};
 
 pub struct Config {
     fs: Box<dyn Fs>,
@@ -10,7 +10,7 @@ pub struct Config {
 impl Config {
     pub fn new(home_dirpath: &Path) -> Self {
         Self {
-            fs: Box::new(DefaultFs::new(home_dirpath)),
+            fs: Box::new(DefaultFs::new(home_dirpath, &temp_dir())),
             downloader: Box::new(DefaultDownloader),
             unziper: Box::new(DefaultUnziper),
         }
