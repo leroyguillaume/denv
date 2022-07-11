@@ -29,7 +29,7 @@ impl Log for Logger {
             Level::Warn => "\x1b[1;33m",
             Level::Error => "\x1b[1;31m",
         };
-        println!("{}{:5} - {}\x1b[0m", color, record.level(), record.args());
+        println!("{}{}\x1b[0m", color, record.args());
     }
 
     fn flush(&self) {}
