@@ -252,9 +252,10 @@ mod test {
                             bin_filepath.clone(),
                             File::create(bin_filepath)?
                         )),
-                        || Err(UnzipError::IoFailed(io::Error::from(
-                            io::ErrorKind::PermissionDenied
-                        ))),
+                        || Err(UnzipError::FileOpeningFailed(
+                            PathBuf::from("terraform.zip"),
+                            io::Error::from(io::ErrorKind::PermissionDenied)
+                        )),
                         || Ok(()),
                         |res| {
                             match res {

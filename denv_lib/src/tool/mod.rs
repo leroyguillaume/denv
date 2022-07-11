@@ -80,6 +80,7 @@ pub trait Tool {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::path::PathBuf;
 
     mod install_error {
         use super::*;
@@ -142,8 +143,10 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let err =
-                        UnzipError::IoFailed(io::Error::from(io::ErrorKind::PermissionDenied));
+                    let err = UnzipError::FileOpeningFailed(
+                        PathBuf::from("terraform.zip"),
+                        io::Error::from(io::ErrorKind::PermissionDenied),
+                    );
                     let expected = err.to_string();
                     let err = InstallError::UnzipFailed(err);
                     assert_eq!(err.to_string(), expected);
