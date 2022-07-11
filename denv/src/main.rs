@@ -1,13 +1,23 @@
 mod logger;
 
-use log::{debug, error, info, trace, warn, Level};
+use denv_lib::cfg::Config;
+use log::Level;
 use logger::Logger;
+use std::path::Path;
+
+macro_rules! exit_if_err {
+    ($result:expr, $code:expr) => {
+        match $result {
+            Ok(res) => res,
+            Err(err) => {
+                log::error!("{}", err);
+                std::process::exit($code);
+            }
+        }
+    };
+}
 
 fn main() {
     Logger::init(Level::Trace).unwrap();
-    trace!("Hello, world!");
-    debug!("Hello, world!");
-    info!("Hello, world!");
-    warn!("Hello, world!");
-    error!("Hello, world!");
+    let _cfg = exit_if_err!(Config::load(Path::new("denv.yaml")), exitcode::CONFIG);
 }
