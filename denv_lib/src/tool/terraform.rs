@@ -1,4 +1,5 @@
 use super::*;
+use log::{debug, info};
 use std::{
     env::consts::{ARCH, OS},
     io::BufWriter,
@@ -28,6 +29,7 @@ impl Terraform {
 
 impl Tool for Terraform {
     fn install(&self, version: &str, cfg: &Config) -> Result<(), InstallError> {
+        debug!("Installing {} v{}", self.name(), version);
         let os = self.os()?;
         let arch = self.arch()?;
         let filename = format!("terraform_{}_{}_{}.zip", version, os, arch);
@@ -52,7 +54,9 @@ impl Tool for Terraform {
             .map_err(InstallError::UnzipFailed)?;
         cfg.fs
             .create_bin_symlink(self.name(), version)
-            .map_err(InstallError::IoFailed)
+            .map_err(InstallError::IoFailed)?;
+        info!("{} v{} installed", self.name(), version);
+        Ok(())
     }
 
     fn name(&self) -> &str {
