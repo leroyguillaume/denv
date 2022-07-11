@@ -9,16 +9,16 @@ use std::{
 macro_rules! ensure_dir {
     ($path:expr) => {
         if $path.is_dir() {
-            debug!("Direction {} already exists", $path.display());
+            debug!("Directory {} already exists", $path.display());
             Ok(())
         } else {
-            debug!("Creation directory {}", $path.display());
+            debug!("Creating directory {}", $path.display());
             debug_err!(create_dir_all(&$path))
         }
     };
 }
 
-macro_rules! trace_open_file_w {
+macro_rules! open_file {
     ($filepath:expr) => {{
         trace!("Opening {} in write mode", $filepath.display());
         OpenOptions::new()
@@ -63,7 +63,7 @@ impl Fs for DefaultFs {
     fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)> {
         let dirpath = self.tool_dirpath(name, version);
         ensure_dir!(dirpath)?;
-        trace_open_file_w!(dirpath.join(name))
+        open_file!(dirpath.join(name))
     }
 
     fn create_bin_symlink(&self, name: &str, version: &str) -> io::Result<()> {
@@ -80,7 +80,7 @@ impl Fs for DefaultFs {
     }
 
     fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)> {
-        trace_open_file_w!(self.tmp_dirpath.join(filename))
+        open_file!(self.tmp_dirpath.join(filename))
     }
 
     fn root_dirpath(&self) -> &Path {
