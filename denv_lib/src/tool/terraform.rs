@@ -47,7 +47,7 @@ impl Tool for Terraform {
             .create_bin_file(self.name(), version)
             .map_err(InstallError::IoFailed)?;
         let mut file_buf = BufWriter::new(bin_file);
-        cfg.unziper
+        cfg.unzipper
             .unzip(&zip_filepath, "terraform", &mut file_buf)
             .map_err(InstallError::UnzipFailed)?;
         cfg.fs
@@ -163,7 +163,7 @@ mod test {
                                 assert_eq!(url, expected_url);
                                 $download()
                             });
-                        let unziper = StubUnziper::new()
+                        let unziper = StubUnzipper::new()
                             .with_unzip_fn(move |filepath, filename, _| {
                                 assert_eq!(filepath, zip_filepath);
                                 assert_eq!(filename, "terraform");

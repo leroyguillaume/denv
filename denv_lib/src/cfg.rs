@@ -37,7 +37,7 @@ pub struct Config {
     tools: Vec<ToolConfig>,
     pub(crate) fs: Box<dyn Fs>,
     pub(crate) downloader: Box<dyn Downloader>,
-    pub(crate) unziper: Box<dyn Unziper>,
+    pub(crate) unzipper: Box<dyn Unzipper>,
 }
 
 impl Config {
@@ -73,7 +73,7 @@ impl Config {
             tools,
             fs: Box::new(DefaultFs::new(fs_root_dirpath, temp_dir())),
             downloader: Box::new(DefaultDownloader),
-            unziper: Box::new(DefaultUnziper),
+            unzipper: Box::new(DefaultUnzipper),
         };
         Ok(cfg)
     }
@@ -90,12 +90,12 @@ pub enum ToolConfig {
 
 #[cfg(test)]
 impl Config {
-    pub fn stub(fs: StubFs, downloader: StubDownloader, unziper: StubUnziper) -> Self {
+    pub fn stub(fs: StubFs, downloader: StubDownloader, unziper: StubUnzipper) -> Self {
         Self {
             tools: vec![],
             downloader: Box::new(downloader),
             fs: Box::new(fs),
-            unziper: Box::new(unziper),
+            unzipper: Box::new(unziper),
         }
     }
 }
