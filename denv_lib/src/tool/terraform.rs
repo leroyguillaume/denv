@@ -146,18 +146,117 @@ mod test {
         mod install {
             use super::*;
 
-            macro_rules! test {
-                (
-                    $ident:ident,
-                    $create_tmp_file:expr,
-                    $download:expr,
-                    $create_bin_file:expr,
-                    $unzip:expr,
-                    $create_bin_symlink:expr,
-                    $expect:expr
-                ) => {
+            macro_rules! tests {
+                ($os:expr, $arch:expr) => {
                     #[test]
-                    fn $ident() {
+                    #[cfg(all(target_os = $os, target_arch = $arch))]
+                    fn should_return_io_failed_err_if_tmp_file_creation_failed() {
+                        let expected_version = "1.2.3";
+                        let tf = Terraform::new(expected_version.into());
+                        let os = tf.os().unwrap();
+                        let arch = tf.arch().unwrap();
+                        let fs = StubFs::new()
+                            .with_create_tmp_file_fn({
+                                move |filename| {
+                                    let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
+                                    assert_eq!(filename, expected);
+                                    Err(io::Error::from(io::ErrorKind::PermissionDenied))
+                                }
+                            });
+                        let downloader = StubDownloader::new();
+                        let unziper = StubUnzipper::new();
+                        let cfg = Config::stub(fs, downloader, unziper);
+                        match tf.install(&cfg) {
+                            Ok(_) => panic!("should fail"),
+                            Err(InstallError::IoFailed(_)) => {}
+                            Err(err) => panic!("{}", err),
+                        }
+                    }
+
+                    #[test]
+                    #[cfg(all(target_os = $os, target_arch = $arch))]
+                    fn should_return_download_failed_err() {
+                        let expected_version = "1.2.3";
+                        let tf = Terraform::new(expected_version.into());
+                        let os = tf.os().unwrap();
+                        let arch = tf.arch().unwrap();
+                        let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
+                        let fs = StubFs::new()
+                            .with_create_tmp_file_fn({
+                                let zip_filepath = zip_filepath.clone();
+                                move |filename| {
+                                    let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
+                                    assert_eq!(filename, expected);
+                                    Ok((
+                                        zip_filepath.clone(),
+                                        File::create(&zip_filepath)?
+                                    ))
+                                }
+                            });
+                        let downloader = StubDownloader::new()
+                            .with_download_fn(move |url, _| {
+                                let expected_url = format!(
+                                    "https://releases.hashicorp.com/terraform/{}/terraform_{}_{}_{}.zip",
+                                    expected_version, expected_version, os, arch
+                                );
+                                assert_eq!(url, expected_url);
+                                Err(DownloadError::RequestFailed(404, String::new()))
+                            });
+                        let unziper = StubUnzipper::new();
+                        let cfg = Config::stub(fs, downloader, unziper);
+                        match tf.install(&cfg) {
+                            Ok(_) => panic!("should fail"),
+                            Err(InstallError::DownloadFailed(_)) => {}
+                            Err(err) => panic!("{}", err),
+                        }
+                    }
+
+                    #[test]
+                    #[cfg(all(target_os = $os, target_arch = $arch))]
+                    fn should_return_io_failed_err_if_bin_file_creation_failed() {
+                        let expected_version = "1.2.3";
+                        let tf = Terraform::new(expected_version.into());
+                        let os = tf.os().unwrap();
+                        let arch = tf.arch().unwrap();
+                        let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
+                        let fs = StubFs::new()
+                            .with_create_tmp_file_fn({
+                                let zip_filepath = zip_filepath.clone();
+                                move |filename| {
+                                    let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
+                                    assert_eq!(filename, expected);
+                                    Ok((
+                                        zip_filepath.clone(),
+                                        File::create(&zip_filepath)?
+                                    ))
+                                }
+                            })
+                            .with_create_bin_file_fn(move |name, version| {
+                                assert_eq!(name, "terraform");
+                                assert_eq!(version, expected_version);
+                                Err(io::Error::from(io::ErrorKind::PermissionDenied))
+                            });
+                        let downloader = StubDownloader::new()
+                            .with_download_fn(move |url, _| {
+                                let expected_url = format!(
+                                    "https://releases.hashicorp.com/terraform/{}/terraform_{}_{}_{}.zip",
+                                    expected_version, expected_version, os, arch
+                                );
+                                assert_eq!(url, expected_url);
+                                Ok(())
+                            });
+                        let unziper = StubUnzipper::new();
+                        let cfg = Config::stub(fs, downloader, unziper);
+                        match tf.install(&cfg) {
+                            Ok(_) => panic!("should fail"),
+                            Err(InstallError::IoFailed(_)) => {}
+                            Err(err) => panic!("{}", err),
+                        }
+                    }
+
+                    #[test]
+                    #[cfg(all(target_os = $os, target_arch = $arch))]
+                    fn should_return_unzip_failed_err() {
                         let expected_version = "1.2.3";
                         let tf = Terraform::new(expected_version.into());
                         let os = tf.os().unwrap();
@@ -170,18 +269,19 @@ mod test {
                                 move |filename| {
                                     let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
                                     assert_eq!(filename, expected);
-                                    $create_tmp_file(&zip_filepath)
+                                    Ok((
+                                        zip_filepath.clone(),
+                                        File::create(&zip_filepath)?
+                                    ))
                                 }
                             })
                             .with_create_bin_file_fn(move |name, version| {
                                 assert_eq!(name, "terraform");
                                 assert_eq!(version, expected_version);
-                                $create_bin_file(&bin_filepath)
-                            })
-                            .with_create_bin_symlink_fn(move |name, version| {
-                                assert_eq!(name, "terraform");
-                                assert_eq!(version, expected_version);
-                                $create_bin_symlink()
+                                Ok((
+                                    bin_filepath.clone(),
+                                    File::create(&bin_filepath)?
+                                ))
                             });
                         let downloader = StubDownloader::new()
                             .with_download_fn(move |url, _| {
@@ -190,150 +290,134 @@ mod test {
                                     expected_version, expected_version, os, arch
                                 );
                                 assert_eq!(url, expected_url);
-                                $download()
+                                Ok(())
                             });
                         let unziper = StubUnzipper::new()
                             .with_unzip_fn(move |filepath, filename, _| {
                                 assert_eq!(filepath, zip_filepath);
                                 assert_eq!(filename, "terraform");
-                                $unzip()
+                                Err(UnzipError::FileOpeningFailed(
+                                    PathBuf::from("terraform.zip"),
+                                    io::Error::from(io::ErrorKind::PermissionDenied)
+                                ))
                             });
                         let cfg = Config::stub(fs, downloader, unziper);
-                        $expect(tf.install(&cfg));
+                        match tf.install(&cfg) {
+                            Ok(_) => panic!("should fail"),
+                            Err(InstallError::UnzipFailed(_)) => {}
+                            Err(err) => panic!("{}", err),
+                        }
                     }
-                };
-            }
 
-            macro_rules! tests {
-                ($os:expr, $arch:expr) => {
+                    #[test]
                     #[cfg(all(target_os = $os, target_arch = $arch))]
-                    test!(
-                        should_return_io_failed_err_if_tmp_file_creation_failed,
-                        |_| Err(io::Error::from(io::ErrorKind::PermissionDenied)),
-                        || Ok(()),
-                        |bin_filepath: &PathBuf| Ok((
-                            bin_filepath.clone(),
-                            File::create(bin_filepath)?
-                        )),
-                        || Ok(()),
-                        || Ok(()),
-                        |res| {
-                            match res {
-                                Ok(_) => panic!("should fail"),
-                                Err(InstallError::IoFailed(_)) => {}
-                                Err(err) => panic!("{}", err),
-                            }
+                    fn should_return_io_failed_err_if_bin_symlink_creation_failed() {
+                        let expected_version = "1.2.3";
+                        let tf = Terraform::new(expected_version.into());
+                        let os = tf.os().unwrap();
+                        let arch = tf.arch().unwrap();
+                        let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
+                        let bin_filepath = tempdir().unwrap().into_path().join("terraform");
+                        let fs = StubFs::new()
+                            .with_create_tmp_file_fn({
+                                let zip_filepath = zip_filepath.clone();
+                                move |filename| {
+                                    let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
+                                    assert_eq!(filename, expected);
+                                    Ok((
+                                        zip_filepath.clone(),
+                                        File::create(&zip_filepath)?
+                                    ))
+                                }
+                            })
+                            .with_create_bin_file_fn(move |name, version| {
+                                assert_eq!(name, "terraform");
+                                assert_eq!(version, expected_version);
+                                Ok((
+                                    bin_filepath.clone(),
+                                    File::create(&bin_filepath)?
+                                ))
+                            })
+                            .with_create_bin_symlink_fn(move |name, version| {
+                                assert_eq!(name, "terraform");
+                                assert_eq!(version, expected_version);
+                                Err(io::Error::from(io::ErrorKind::PermissionDenied))
+                            });
+                        let downloader = StubDownloader::new()
+                            .with_download_fn(move |url, _| {
+                                let expected_url = format!(
+                                    "https://releases.hashicorp.com/terraform/{}/terraform_{}_{}_{}.zip",
+                                    expected_version, expected_version, os, arch
+                                );
+                                assert_eq!(url, expected_url);
+                                Ok(())
+                            });
+                        let unziper = StubUnzipper::new()
+                            .with_unzip_fn(move |filepath, filename, _| {
+                                assert_eq!(filepath, zip_filepath);
+                                assert_eq!(filename, "terraform");
+                                Ok(())
+                            });
+                        let cfg = Config::stub(fs, downloader, unziper);
+                        match tf.install(&cfg) {
+                            Ok(_) => panic!("should fail"),
+                            Err(InstallError::IoFailed(_)) => {}
+                            Err(err) => panic!("{}", err),
                         }
-                    );
+                    }
 
+                    #[test]
                     #[cfg(all(target_os = $os, target_arch = $arch))]
-                    test!(
-                        should_return_download_failed_err,
-                        |zip_filepath: &PathBuf| Ok((
-                            zip_filepath.clone(),
-                            File::create(zip_filepath)?
-                        )),
-                        || Err(DownloadError::RequestFailed(404, String::new())),
-                        |bin_filepath: &PathBuf| Ok((
-                            bin_filepath.clone(),
-                            File::create(bin_filepath)?
-                        )),
-                        || Ok(()),
-                        || Ok(()),
-                        |res| {
-                            match res {
-                                Ok(_) => panic!("should fail"),
-                                Err(InstallError::DownloadFailed(_)) => {}
-                                Err(err) => panic!("{}", err),
-                            }
-                        }
-                    );
-
-                    #[cfg(all(target_os = $os, target_arch = $arch))]
-                    test!(
-                        should_return_io_failed_err_if_bin_file_creation_failed,
-                        |zip_filepath: &PathBuf| Ok((
-                            zip_filepath.clone(),
-                            File::create(zip_filepath)?
-                        )),
-                        || Ok(()),
-                        |_| Err(io::Error::from(io::ErrorKind::PermissionDenied)),
-                        || Ok(()),
-                        || Ok(()),
-                        |res| {
-                            match res {
-                                Ok(_) => panic!("should fail"),
-                                Err(InstallError::IoFailed(_)) => {}
-                                Err(err) => panic!("{}", err),
-                            }
-                        }
-                    );
-
-                    #[cfg(all(target_os = $os, target_arch = $arch))]
-                    test!(
-                        should_return_unzip_failed_err,
-                        |zip_filepath: &PathBuf| Ok((
-                            zip_filepath.clone(),
-                            File::create(zip_filepath)?
-                        )),
-                        || Ok(()),
-                        |bin_filepath: &PathBuf| Ok((
-                            bin_filepath.clone(),
-                            File::create(bin_filepath)?
-                        )),
-                        || Err(UnzipError::FileOpeningFailed(
-                            PathBuf::from("terraform.zip"),
-                            io::Error::from(io::ErrorKind::PermissionDenied)
-                        )),
-                        || Ok(()),
-                        |res| {
-                            match res {
-                                Ok(_) => panic!("should fail"),
-                                Err(InstallError::UnzipFailed(_)) => {}
-                                Err(err) => panic!("{}", err),
-                            }
-                        }
-                    );
-
-                    #[cfg(all(target_os = $os, target_arch = $arch))]
-                    test!(
-                        should_return_io_failed_err_if_bin_symlink_creation_failed,
-                        |zip_filepath: &PathBuf| Ok((
-                            zip_filepath.clone(),
-                            File::create(zip_filepath)?
-                        )),
-                        || Ok(()),
-                        |bin_filepath: &PathBuf| Ok((
-                            bin_filepath.clone(),
-                            File::create(bin_filepath)?
-                        )),
-                        || Ok(()),
-                        || Err(io::Error::from(io::ErrorKind::PermissionDenied)),
-                        |res| {
-                            match res {
-                                Ok(_) => panic!("should fail"),
-                                Err(InstallError::IoFailed(_)) => {}
-                                Err(err) => panic!("{}", err),
-                            }
-                        }
-                    );
-
-                    #[cfg(all(target_os = $os, target_arch = $arch))]
-                    test!(
-                        should_install_terraform,
-                        |zip_filepath: &PathBuf| Ok((
-                            zip_filepath.clone(),
-                            File::create(zip_filepath)?
-                        )),
-                        || Ok(()),
-                        |bin_filepath: &PathBuf| Ok((
-                            bin_filepath.clone(),
-                            File::create(bin_filepath)?
-                        )),
-                        || Ok(()),
-                        || Ok(()),
-                        |res: Result<(), InstallError>| res.unwrap()
-                    );
+                    fn should_install_terraform() {
+                        let expected_version = "1.2.3";
+                        let tf = Terraform::new(expected_version.into());
+                        let os = tf.os().unwrap();
+                        let arch = tf.arch().unwrap();
+                        let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
+                        let bin_filepath = tempdir().unwrap().into_path().join("terraform");
+                        let fs = StubFs::new()
+                            .with_create_tmp_file_fn({
+                                let zip_filepath = zip_filepath.clone();
+                                move |filename| {
+                                    let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
+                                    assert_eq!(filename, expected);
+                                    Ok((
+                                        zip_filepath.clone(),
+                                        File::create(&zip_filepath)?
+                                    ))
+                                }
+                            })
+                            .with_create_bin_file_fn(move |name, version| {
+                                assert_eq!(name, "terraform");
+                                assert_eq!(version, expected_version);
+                                Ok((
+                                    bin_filepath.clone(),
+                                    File::create(&bin_filepath)?
+                                ))
+                            })
+                            .with_create_bin_symlink_fn(move |name, version| {
+                                assert_eq!(name, "terraform");
+                                assert_eq!(version, expected_version);
+                                Ok(())
+                            });
+                        let downloader = StubDownloader::new()
+                            .with_download_fn(move |url, _| {
+                                let expected_url = format!(
+                                    "https://releases.hashicorp.com/terraform/{}/terraform_{}_{}_{}.zip",
+                                    expected_version, expected_version, os, arch
+                                );
+                                assert_eq!(url, expected_url);
+                                Ok(())
+                            });
+                        let unziper = StubUnzipper::new()
+                            .with_unzip_fn(move |filepath, filename, _| {
+                                assert_eq!(filepath, zip_filepath);
+                                assert_eq!(filename, "terraform");
+                                Ok(())
+                            });
+                        let cfg = Config::stub(fs, downloader, unziper);
+                        tf.install(&cfg).unwrap()
+                    }
                 };
             }
 
