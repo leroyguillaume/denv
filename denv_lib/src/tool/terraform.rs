@@ -68,9 +68,6 @@ impl Tool for Terraform {
         cfg.unzipper
             .unzip(&zip_filepath, TOOL_NAME, &mut file_buf)
             .map_err(InstallError::UnzipFailed)?;
-        cfg.fs
-            .create_bin_symlink(TOOL_NAME, &self.0)
-            .map_err(InstallError::IoFailed)?;
         info!("{} v{} installed", TOOL_NAME, &self.0);
         Ok(())
     }
@@ -310,63 +307,6 @@ mod test {
 
                     #[test]
                     #[cfg(all(target_os = $os, target_arch = $arch))]
-                    fn should_return_io_failed_err_if_bin_symlink_creation_failed() {
-                        let expected_version = "1.2.3";
-                        let tf = Terraform::new(expected_version.into());
-                        let os = tf.os().unwrap();
-                        let arch = tf.arch().unwrap();
-                        let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
-                        let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
-                        let fs = StubFs::new()
-                            .with_create_tmp_file_fn({
-                                let zip_filepath = zip_filepath.clone();
-                                move |filename| {
-                                    let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
-                                    assert_eq!(filename, expected);
-                                    Ok((
-                                        zip_filepath.clone(),
-                                        File::create(&zip_filepath)?
-                                    ))
-                                }
-                            })
-                            .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, TOOL_NAME);
-                                assert_eq!(version, expected_version);
-                                Ok((
-                                    bin_filepath.clone(),
-                                    File::create(&bin_filepath)?
-                                ))
-                            })
-                            .with_create_bin_symlink_fn(move |name, version| {
-                                assert_eq!(name, TOOL_NAME);
-                                assert_eq!(version, expected_version);
-                                Err(io::Error::from(io::ErrorKind::PermissionDenied))
-                            });
-                        let downloader = StubDownloader::new()
-                            .with_download_fn(move |url, _| {
-                                let expected_url = format!(
-                                    "https://releases.hashicorp.com/terraform/{}/terraform_{}_{}_{}.zip",
-                                    expected_version, expected_version, os, arch
-                                );
-                                assert_eq!(url, expected_url);
-                                Ok(())
-                            });
-                        let unziper = StubUnzipper::new()
-                            .with_unzip_fn(move |filepath, filename, _| {
-                                assert_eq!(filepath, zip_filepath);
-                                assert_eq!(filename, TOOL_NAME);
-                                Ok(())
-                            });
-                        let cfg = Config::stub(fs, downloader, unziper);
-                        match tf.install(&cfg) {
-                            Ok(_) => panic!("should fail"),
-                            Err(InstallError::IoFailed(_)) => {}
-                            Err(err) => panic!("{}", err),
-                        }
-                    }
-
-                    #[test]
-                    #[cfg(all(target_os = $os, target_arch = $arch))]
                     fn should_install_terraform() {
                         let expected_version = "1.2.3";
                         let tf = Terraform::new(expected_version.into());
@@ -393,11 +333,6 @@ mod test {
                                     bin_filepath.clone(),
                                     File::create(&bin_filepath)?
                                 ))
-                            })
-                            .with_create_bin_symlink_fn(move |name, version| {
-                                assert_eq!(name, TOOL_NAME);
-                                assert_eq!(version, expected_version);
-                                Ok(())
                             });
                         let downloader = StubDownloader::new()
                             .with_download_fn(move |url, _| {
