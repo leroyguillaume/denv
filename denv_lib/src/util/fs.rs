@@ -13,7 +13,7 @@ macro_rules! ensure_dir {
             Ok(())
         } else {
             debug!("Creating directory {}", $path.display());
-            debug_err!(create_dir_all(&$path))
+            create_dir_all(&$path)
         }
     };
 }

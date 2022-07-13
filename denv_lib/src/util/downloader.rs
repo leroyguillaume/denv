@@ -1,4 +1,3 @@
-use crate::*;
 use log::{debug, trace};
 use reqwest::{self, blocking::get};
 use std::{
@@ -37,14 +36,16 @@ impl Downloader for DefaultDownloader {
     fn download(&self, url: &str, out: &mut dyn Write) -> Result<(), DownloadError> {
         let mut buf = BufWriter::new(out);
         debug!("Processing GET request on {}", url);
-        let mut resp = map_debug_err!(get(url), DownloadError::RequestProcessingFailed)?;
+        let mut resp = get(url).map_err(DownloadError::RequestProcessingFailed)?;
         let status = resp.status();
         debug!("Server sent status code {}", status.as_u16());
         if !status.is_success() {
             let content = resp.text().unwrap_or_default();
-            return debug_err!(Err(DownloadError::RequestFailed(status.as_u16(), content)));
+            return Err(DownloadError::RequestFailed(status.as_u16(), content));
         }
-        let size = map_debug_err!(resp.copy_to(&mut buf), DownloadError::WritingFailed)?;
+        let size = resp
+            .copy_to(&mut buf)
+            .map_err(DownloadError::WritingFailed)?;
         trace!("{} bytes written", size);
         Ok(())
     }
