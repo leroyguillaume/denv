@@ -1,5 +1,5 @@
 use super::*;
-use log::{debug, info};
+use log::info;
 use std::{
     env::consts::{ARCH, OS},
     io::BufWriter,
@@ -45,7 +45,7 @@ impl Terraform {
 
 impl Tool for Terraform {
     fn install(&self, cfg: &Config) -> Result<(), InstallError> {
-        debug!("Installing {} v{}", TOOL_NAME, self.0);
+        info!("Installing {} v{}", TOOL_NAME, self.0);
         let os = self.os()?;
         let arch = self.arch()?;
         let filename = format!("terraform_{}_{}_{}.zip", self.0, os, arch);
