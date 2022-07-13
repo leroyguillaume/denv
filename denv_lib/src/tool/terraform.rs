@@ -5,10 +5,15 @@ use std::{
     io::BufWriter,
 };
 
-pub struct Terraform;
+#[derive(Debug, Eq, PartialEq)]
+pub struct Terraform(String);
 
 impl Terraform {
-    fn arch(&self) -> Result<&str, InstallError> {
+    pub fn new(version: String) -> Self {
+        Self(version)
+    }
+
+    fn arch(&self) -> Result<&'static str, InstallError> {
         match ARCH {
             "x86" => Ok("386"),
             "x86_64" => Ok("amd64"),
@@ -18,7 +23,7 @@ impl Terraform {
         }
     }
 
-    fn os(&self) -> Result<&str, InstallError> {
+    fn os(&self) -> Result<&'static str, InstallError> {
         match OS {
             "macos" => Ok("darwin"),
             "linux" => Ok("linux"),
@@ -28,14 +33,14 @@ impl Terraform {
 }
 
 impl Tool for Terraform {
-    fn install(&self, version: &str, cfg: &Config) -> Result<(), InstallError> {
-        debug!("Installing {} v{}", self.name(), version);
+    fn install(&self, cfg: &Config) -> Result<(), InstallError> {
+        debug!("Installing {} v{}", self.name(), self.0);
         let os = self.os()?;
         let arch = self.arch()?;
-        let filename = format!("terraform_{}_{}_{}.zip", version, os, arch);
+        let filename = format!("terraform_{}_{}_{}.zip", self.0, os, arch);
         let url = format!(
             "https://releases.hashicorp.com/terraform/{}/{}",
-            version, filename
+            self.0, filename
         );
         let (zip_filepath, mut zip_file) = cfg
             .fs
@@ -46,16 +51,16 @@ impl Tool for Terraform {
             .map_err(InstallError::DownloadFailed)?;
         let (_, bin_file) = cfg
             .fs
-            .create_bin_file(self.name(), version)
+            .create_bin_file(self.name(), &self.0)
             .map_err(InstallError::IoFailed)?;
         let mut file_buf = BufWriter::new(bin_file);
         cfg.unzipper
             .unzip(&zip_filepath, "terraform", &mut file_buf)
             .map_err(InstallError::UnzipFailed)?;
         cfg.fs
-            .create_bin_symlink(self.name(), version)
+            .create_bin_symlink(self.name(), &self.0)
             .map_err(InstallError::IoFailed)?;
-        info!("{} v{} installed", self.name(), version);
+        info!("{} v{} installed", self.name(), &self.0);
         Ok(())
     }
 
@@ -69,6 +74,10 @@ impl Tool for Terraform {
             ("linux", "x86", "x86_64", "arm", "aarch64")
         )
     }
+
+    fn version(&self) -> &str {
+        &self.0
+    }
 }
 
 #[cfg(test)]
@@ -81,6 +90,19 @@ mod test {
     mod terraform {
         use super::*;
 
+        mod new {
+            use super::*;
+
+            #[test]
+            fn should_return_tool() {
+                let expected = Terraform("1.2.3".into());
+                let tf = Terraform::new(expected.0.clone());
+                assert_eq!(tf, expected);
+                assert_eq!(tf.name(), "terraform");
+                assert_eq!(tf.version(), expected.0);
+            }
+        }
+
         mod arch {
             use super::*;
 
@@ -89,7 +111,8 @@ mod test {
                     #[test]
                     #[cfg(target_arch = $arch)]
                     fn should_return_arch() {
-                        let arch = Terraform.arch().unwrap();
+                        let tf = Terraform("1.2.3".into());
+                        let arch = tf.arch().unwrap();
                         assert_eq!(arch, $expected);
                     }
                 };
@@ -109,7 +132,8 @@ mod test {
                     #[test]
                     #[cfg(target_os = $os)]
                     fn should_return_os() {
-                        let os = Terraform.os().unwrap();
+                        let tf = Terraform("1.2.3".into());
+                        let os = tf.os().unwrap();
                         assert_eq!(os, $expected);
                     }
                 };
@@ -134,9 +158,10 @@ mod test {
                 ) => {
                     #[test]
                     fn $ident() {
-                        let os = Terraform.os().unwrap();
-                        let arch = Terraform.arch().unwrap();
                         let expected_version = "1.2.3";
+                        let tf = Terraform::new(expected_version.into());
+                        let os = tf.os().unwrap();
+                        let arch = tf.arch().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
                         let bin_filepath = tempdir().unwrap().into_path().join("terraform");
                         let fs = StubFs::new()
@@ -174,7 +199,7 @@ mod test {
                                 $unzip()
                             });
                         let cfg = Config::stub(fs, downloader, unziper);
-                        $expect(Terraform.install(expected_version, &cfg));
+                        $expect(tf.install(&cfg));
                     }
                 };
             }
@@ -318,15 +343,6 @@ mod test {
             tests!("linux", "x86_64");
             tests!("linux", "arm");
             tests!("linux", "aarch64");
-        }
-
-        mod name {
-            use super::*;
-
-            #[test]
-            fn should_return_name() {
-                assert_eq!(Terraform.name(), "terraform");
-            }
         }
     }
 }
