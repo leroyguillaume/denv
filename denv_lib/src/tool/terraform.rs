@@ -5,6 +5,15 @@ use std::{
     io::BufWriter,
 };
 
+macro_rules! supported_systems {
+    () => {
+        maplit::hashmap! {
+            "linux" => maplit::hashset!("x86", "x86_64", "arm", "aarch64"),
+            "macos" => maplit::hashset!("x86_64", "aarch64"),
+        }
+    };
+}
+
 const TOOL_NAME: &str = "terraform";
 
 #[derive(Debug, Eq, PartialEq)]
@@ -21,7 +30,7 @@ impl Terraform {
             "x86_64" => Ok("amd64"),
             "arm" => Ok("arm"),
             "aarch64" => Ok("arm64"),
-            _ => Err(InstallError::UnsupportedArch(self.supported_systems())),
+            _ => Err(InstallError::UnsupportedArch(supported_systems!())),
         }
     }
 
@@ -29,7 +38,7 @@ impl Terraform {
         match OS {
             "macos" => Ok("darwin"),
             "linux" => Ok("linux"),
-            _ => Err(InstallError::UnsupportedOs(self.supported_systems())),
+            _ => Err(InstallError::UnsupportedOs(supported_systems!())),
         }
     }
 }
@@ -64,13 +73,6 @@ impl Tool for Terraform {
             .map_err(InstallError::IoFailed)?;
         info!("{} v{} installed", TOOL_NAME, &self.0);
         Ok(())
-    }
-
-    fn supported_systems(&self) -> SupportedSystems {
-        supported_systems!(
-            ("macos", "x86_64", "aarch64"),
-            ("linux", "x86", "x86_64", "arm", "aarch64")
-        )
     }
 
     fn version(&self) -> &str {

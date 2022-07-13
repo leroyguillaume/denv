@@ -8,13 +8,6 @@ use std::{
     io,
 };
 
-macro_rules! supported_systems {
-    ($(($os:expr, $($arch:expr),+)),+) => {{
-        HashMap::from([$(($os, HashSet::from([$($arch),*]))),*])
-    }};
-}
-pub(crate) use supported_systems;
-
 pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
 
 #[derive(Debug)]
@@ -27,7 +20,7 @@ pub enum InstallError {
 }
 
 impl InstallError {
-    fn fmt_supported_system(&self, supported_systems: &SupportedSystems) -> String {
+    fn fmt_supported_systems(&self, supported_systems: &SupportedSystems) -> String {
         let mut s = String::new();
         let mut systems = Vec::from_iter(supported_systems.keys());
         systems.sort();
@@ -53,14 +46,14 @@ impl Display for InstallError {
                 f,
                 "OS '{}' is not supported (must be one of {})",
                 OS,
-                self.fmt_supported_system(supported_systems)
+                self.fmt_supported_systems(supported_systems)
             ),
             Self::UnsupportedArch(supported_systems) => write!(
                 f,
                 "Architecture '{}' is not supported for OS '{}' (must be one of {})",
                 ARCH,
                 OS,
-                self.fmt_supported_system(supported_systems)
+                self.fmt_supported_systems(supported_systems)
             ),
             Self::IoFailed(err) => write!(f, "{}", err),
             Self::DownloadFailed(err) => write!(f, "{}", err),
@@ -72,14 +65,13 @@ impl Display for InstallError {
 pub trait Tool {
     fn install(&self, cfg: &Config) -> Result<(), InstallError>;
 
-    fn supported_systems(&self) -> SupportedSystems;
-
     fn version(&self) -> &str;
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use maplit::{hashmap, hashset};
     use std::path::PathBuf;
 
     mod install_error {
@@ -93,8 +85,10 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let supported_systems =
-                        supported_systems!(("linux", "x86", "x86_64"), ("macos", "arm", "aarch64"));
+                    let supported_systems = hashmap! {
+                        "linux" => hashset!("x86", "x86_64"),
+                        "macos" => hashset!("arm", "aarch64"),
+                    };
                     let err = InstallError::UnsupportedOs(supported_systems);
                     let expected = format!("OS '{}' is not supported (must be one of [linux x86, linux x86_64, macos aarch64, macos arm])", OS);
                     assert_eq!(err.to_string(), expected);
@@ -106,8 +100,10 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let supported_systems =
-                        supported_systems!(("linux", "x86", "x86_64"), ("macos", "arm", "aarch64"));
+                    let supported_systems = hashmap! {
+                        "linux" => hashset!("x86", "x86_64"),
+                        "macos" => hashset!("arm", "aarch64"),
+                    };
                     let err = InstallError::UnsupportedArch(supported_systems);
                     let expected = format!("Architecture '{}' is not supported for OS '{}' (must be one of [linux x86, linux x86_64, macos aarch64, macos arm])", ARCH, OS);
                     assert_eq!(err.to_string(), expected);

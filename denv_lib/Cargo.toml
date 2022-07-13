@@ -9,6 +9,7 @@ edition = "2021"
 home = "0.5"
 jsonschema = "0.16"
 log = "0.4"
+maplit = "1.0"
 reqwest = { version = "0.11", features = ["blocking"] }
 serde_json = "1.0"
 serde_yaml = "0.8"
