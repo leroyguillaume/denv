@@ -5,6 +5,8 @@ use std::{
     io::BufWriter,
 };
 
+const TOOL_NAME: &str = "terraform";
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct Terraform(String);
 
@@ -34,7 +36,7 @@ impl Terraform {
 
 impl Tool for Terraform {
     fn install(&self, cfg: &Config) -> Result<(), InstallError> {
-        debug!("Installing {} v{}", self.name(), self.0);
+        debug!("Installing {} v{}", TOOL_NAME, self.0);
         let os = self.os()?;
         let arch = self.arch()?;
         let filename = format!("terraform_{}_{}_{}.zip", self.0, os, arch);
@@ -51,21 +53,17 @@ impl Tool for Terraform {
             .map_err(InstallError::DownloadFailed)?;
         let (_, bin_file) = cfg
             .fs
-            .create_bin_file(self.name(), &self.0)
+            .create_bin_file(TOOL_NAME, &self.0)
             .map_err(InstallError::IoFailed)?;
         let mut file_buf = BufWriter::new(bin_file);
         cfg.unzipper
-            .unzip(&zip_filepath, "terraform", &mut file_buf)
+            .unzip(&zip_filepath, TOOL_NAME, &mut file_buf)
             .map_err(InstallError::UnzipFailed)?;
         cfg.fs
-            .create_bin_symlink(self.name(), &self.0)
+            .create_bin_symlink(TOOL_NAME, &self.0)
             .map_err(InstallError::IoFailed)?;
-        info!("{} v{} installed", self.name(), &self.0);
+        info!("{} v{} installed", TOOL_NAME, &self.0);
         Ok(())
-    }
-
-    fn name(&self) -> &str {
-        "terraform"
     }
 
     fn supported_systems(&self) -> SupportedSystems {
@@ -98,7 +96,6 @@ mod test {
                 let expected = Terraform("1.2.3".into());
                 let tf = Terraform::new(expected.0.clone());
                 assert_eq!(tf, expected);
-                assert_eq!(tf.name(), "terraform");
                 assert_eq!(tf.version(), expected.0);
             }
         }
@@ -232,7 +229,7 @@ mod test {
                                 }
                             })
                             .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, "terraform");
+                                assert_eq!(name, TOOL_NAME);
                                 assert_eq!(version, expected_version);
                                 Err(io::Error::from(io::ErrorKind::PermissionDenied))
                             });
@@ -262,7 +259,7 @@ mod test {
                         let os = tf.os().unwrap();
                         let arch = tf.arch().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
-                        let bin_filepath = tempdir().unwrap().into_path().join("terraform");
+                        let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
                         let fs = StubFs::new()
                             .with_create_tmp_file_fn({
                                 let zip_filepath = zip_filepath.clone();
@@ -276,7 +273,7 @@ mod test {
                                 }
                             })
                             .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, "terraform");
+                                assert_eq!(name, TOOL_NAME);
                                 assert_eq!(version, expected_version);
                                 Ok((
                                     bin_filepath.clone(),
@@ -295,7 +292,7 @@ mod test {
                         let unziper = StubUnzipper::new()
                             .with_unzip_fn(move |filepath, filename, _| {
                                 assert_eq!(filepath, zip_filepath);
-                                assert_eq!(filename, "terraform");
+                                assert_eq!(filename, TOOL_NAME);
                                 Err(UnzipError::FileOpeningFailed(
                                     PathBuf::from("terraform.zip"),
                                     io::Error::from(io::ErrorKind::PermissionDenied)
@@ -317,7 +314,7 @@ mod test {
                         let os = tf.os().unwrap();
                         let arch = tf.arch().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
-                        let bin_filepath = tempdir().unwrap().into_path().join("terraform");
+                        let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
                         let fs = StubFs::new()
                             .with_create_tmp_file_fn({
                                 let zip_filepath = zip_filepath.clone();
@@ -331,7 +328,7 @@ mod test {
                                 }
                             })
                             .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, "terraform");
+                                assert_eq!(name, TOOL_NAME);
                                 assert_eq!(version, expected_version);
                                 Ok((
                                     bin_filepath.clone(),
@@ -339,7 +336,7 @@ mod test {
                                 ))
                             })
                             .with_create_bin_symlink_fn(move |name, version| {
-                                assert_eq!(name, "terraform");
+                                assert_eq!(name, TOOL_NAME);
                                 assert_eq!(version, expected_version);
                                 Err(io::Error::from(io::ErrorKind::PermissionDenied))
                             });
@@ -355,7 +352,7 @@ mod test {
                         let unziper = StubUnzipper::new()
                             .with_unzip_fn(move |filepath, filename, _| {
                                 assert_eq!(filepath, zip_filepath);
-                                assert_eq!(filename, "terraform");
+                                assert_eq!(filename, TOOL_NAME);
                                 Ok(())
                             });
                         let cfg = Config::stub(fs, downloader, unziper);
@@ -374,7 +371,7 @@ mod test {
                         let os = tf.os().unwrap();
                         let arch = tf.arch().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
-                        let bin_filepath = tempdir().unwrap().into_path().join("terraform");
+                        let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
                         let fs = StubFs::new()
                             .with_create_tmp_file_fn({
                                 let zip_filepath = zip_filepath.clone();
@@ -388,7 +385,7 @@ mod test {
                                 }
                             })
                             .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, "terraform");
+                                assert_eq!(name, TOOL_NAME);
                                 assert_eq!(version, expected_version);
                                 Ok((
                                     bin_filepath.clone(),
@@ -396,7 +393,7 @@ mod test {
                                 ))
                             })
                             .with_create_bin_symlink_fn(move |name, version| {
-                                assert_eq!(name, "terraform");
+                                assert_eq!(name, TOOL_NAME);
                                 assert_eq!(version, expected_version);
                                 Ok(())
                             });
@@ -412,7 +409,7 @@ mod test {
                         let unziper = StubUnzipper::new()
                             .with_unzip_fn(move |filepath, filename, _| {
                                 assert_eq!(filepath, zip_filepath);
-                                assert_eq!(filename, "terraform");
+                                assert_eq!(filename, TOOL_NAME);
                                 Ok(())
                             });
                         let cfg = Config::stub(fs, downloader, unziper);

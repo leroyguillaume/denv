@@ -72,8 +72,6 @@ impl Display for InstallError {
 pub trait Tool {
     fn install(&self, cfg: &Config) -> Result<(), InstallError>;
 
-    fn name(&self) -> &str;
-
     fn supported_systems(&self) -> SupportedSystems;
 
     fn version(&self) -> &str;
