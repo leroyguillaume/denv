@@ -29,13 +29,12 @@ impl Log for Logger {
             Level::Warn => "\x1b[1;33m",
             Level::Error => "\x1b[1;31m",
         };
-        if let Some(log) = record.args().as_str() {
-            print!("{}", color);
-            for line in log.lines() {
-                println!("{}: {}", env!("CARGO_PKG_NAME"), line);
-            }
-            println!("\x1b");
-        }
+        println!(
+            "{}[{}] {}\x1b",
+            color,
+            env!("CARGO_PKG_NAME"),
+            record.args()
+        );
     }
 
     fn flush(&self) {}
