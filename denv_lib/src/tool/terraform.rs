@@ -56,14 +56,14 @@ impl Tool for Terraform {
         let (zip_filepath, mut zip_file) = cfg
             .fs
             .create_tmp_file(&filename)
-            .map_err(InstallError::IoFailed)?;
+            .map_err(InstallError::FileSystemWritingFailed)?;
         cfg.downloader
             .download(&url, &mut zip_file)
             .map_err(InstallError::DownloadFailed)?;
         let (_, bin_file) = cfg
             .fs
             .create_bin_file(TOOL_NAME, &self.0)
-            .map_err(InstallError::IoFailed)?;
+            .map_err(InstallError::FileSystemWritingFailed)?;
         let mut file_buf = BufWriter::new(bin_file);
         cfg.unzipper
             .unzip(&zip_filepath, TOOL_NAME, &mut file_buf)
@@ -147,7 +147,7 @@ mod test {
                 ($os:expr, $arch:expr) => {
                     #[test]
                     #[cfg(all(target_os = $os, target_arch = $arch))]
-                    fn should_return_io_failed_err_if_tmp_file_creation_failed() {
+                    fn should_return_file_system_writing_failed_failed_err_if_tmp_file_creation_failed() {
                         let expected_version = "1.2.3";
                         let tf = Terraform::new(expected_version.into());
                         let os = tf.os().unwrap();
@@ -165,7 +165,7 @@ mod test {
                         let cfg = Config::stub(fs, downloader, unziper);
                         match tf.install(&cfg) {
                             Ok(_) => panic!("should fail"),
-                            Err(InstallError::IoFailed(_)) => {}
+                            Err(InstallError::FileSystemWritingFailed(_)) => {}
                             Err(err) => panic!("{}", err),
                         }
                     }
@@ -211,7 +211,7 @@ mod test {
 
                     #[test]
                     #[cfg(all(target_os = $os, target_arch = $arch))]
-                    fn should_return_io_failed_err_if_bin_file_creation_failed() {
+                    fn should_return_file_system_writing_failed_err_if_bin_file_creation_failed() {
                         let expected_version = "1.2.3";
                         let tf = Terraform::new(expected_version.into());
                         let os = tf.os().unwrap();
@@ -247,7 +247,7 @@ mod test {
                         let cfg = Config::stub(fs, downloader, unziper);
                         match tf.install(&cfg) {
                             Ok(_) => panic!("should fail"),
-                            Err(InstallError::IoFailed(_)) => {}
+                            Err(InstallError::FileSystemWritingFailed(_)) => {}
                             Err(err) => panic!("{}", err),
                         }
                     }

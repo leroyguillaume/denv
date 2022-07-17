@@ -14,7 +14,7 @@ pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
 pub enum InstallError {
     UnsupportedOs(SupportedSystems),
     UnsupportedArch(SupportedSystems),
-    IoFailed(fs::Error),
+    FileSystemWritingFailed(fs::Error),
     DownloadFailed(DownloadError),
     UnzipFailed(PathBuf, String, UnzipError),
 }
@@ -50,12 +50,12 @@ impl Display for InstallError {
             ),
             Self::UnsupportedArch(supported_systems) => write!(
                 f,
-                "Architecture '{}' is not supported for OS '{}' (must be one of {})",
+                "architecture '{}' is not supported for OS '{}' (must be one of {})",
                 ARCH,
                 OS,
                 self.fmt_supported_systems(supported_systems)
             ),
-            Self::IoFailed(err) => write!(f, "{}", err),
+            Self::FileSystemWritingFailed(err) => write!(f, "{}", err),
             Self::DownloadFailed(err) => write!(f, "{}", err),
             Self::UnzipFailed(zip_filepath, filepath, err) => write!(
                 f,
@@ -112,12 +112,12 @@ mod test {
                         "macos" => hashset!("arm", "aarch64"),
                     };
                     let err = InstallError::UnsupportedArch(supported_systems);
-                    let expected = format!("Architecture '{}' is not supported for OS '{}' (must be one of [linux x86, linux x86_64, macos aarch64, macos arm])", ARCH, OS);
+                    let expected = format!("architecture '{}' is not supported for OS '{}' (must be one of [linux x86, linux x86_64, macos aarch64, macos arm])", ARCH, OS);
                     assert_eq!(err.to_string(), expected);
                 }
             }
 
-            mod io_failed {
+            mod file_system_writing_failed {
                 use super::*;
 
                 #[test]
@@ -127,7 +127,7 @@ mod test {
                         io::Error::from(io::ErrorKind::PermissionDenied),
                     );
                     let expected = err.to_string();
-                    let err = InstallError::IoFailed(err);
+                    let err = InstallError::FileSystemWritingFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
