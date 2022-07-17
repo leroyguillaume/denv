@@ -1,4 +1,10 @@
-use crate::util::{downloader::*, fs::*, zip::*};
+#[cfg(test)]
+use crate::util::fs::StubFs;
+use crate::util::{
+    downloader::*,
+    fs::{DefaultFs, Fs},
+    zip::*,
+};
 use home::home_dir;
 use jsonschema::JSONSchema;
 use log::debug;

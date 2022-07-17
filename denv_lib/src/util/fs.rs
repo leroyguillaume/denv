@@ -1,5 +1,6 @@
 use log::{debug, trace};
 use std::{
+    fmt::{self, Display, Formatter},
     fs::{create_dir_all, File, OpenOptions},
     io,
     os::unix::fs::symlink,
@@ -13,28 +14,57 @@ macro_rules! ensure_dir {
             Ok(())
         } else {
             debug!("Creating directory {}", $path.display());
-            create_dir_all(&$path)
+            create_dir_all($path).map_err(|err| Error::new($path.clone(), err))
         }
     };
 }
 
 macro_rules! open_file {
-    ($filepath:expr) => {{
-        trace!("Opening {} in write mode", $filepath.display());
+    ($path:expr) => {{
+        trace!("Opening {} in write mode", $path.display());
         OpenOptions::new()
             .create(true)
             .write(true)
-            .open($filepath)
-            .map(|file| ($filepath, file))
+            .open(&$path)
+            .map(|file| ($path, file))
+            .map_err(|err| Error::new($path, err))
     }};
 }
 
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+pub struct Error {
+    path: PathBuf,
+    source: io::Error,
+}
+
+impl Error {
+    pub fn new(path: PathBuf, source: io::Error) -> Self {
+        Self { path, source }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn source(&self) -> &io::Error {
+        &self.source
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "I/O failed on {}: {}", self.path.display(), self.source)
+    }
+}
+
 pub trait Fs {
-    fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)>;
+    fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)>;
 
-    fn create_bin_symlink(&self, name: &str, version: &str) -> io::Result<()>;
+    fn create_bin_symlink(&self, name: &str, version: &str) -> Result<()>;
 
-    fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)>;
+    fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)>;
 
     fn root_dirpath(&self) -> &Path;
 
@@ -60,26 +90,26 @@ impl DefaultFs {
 }
 
 impl Fs for DefaultFs {
-    fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)> {
+    fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)> {
         let dirpath = self.tool_dirpath(name, version);
-        ensure_dir!(dirpath)?;
+        ensure_dir!(&dirpath)?;
         open_file!(dirpath.join(name))
     }
 
-    fn create_bin_symlink(&self, name: &str, version: &str) -> io::Result<()> {
+    fn create_bin_symlink(&self, name: &str, version: &str) -> Result<()> {
         let src_filepath = self.tool_dirpath(name, version).join(name);
         let dest_dirpath = self.root_dirpath.join("bin");
-        ensure_dir!(dest_dirpath)?;
+        ensure_dir!(&dest_dirpath)?;
         let dest_filepath = dest_dirpath.join(name);
         debug!(
             "Creating symlink from {} to {}",
             src_filepath.display(),
             dest_dirpath.display()
         );
-        symlink(src_filepath, dest_filepath)
+        symlink(src_filepath, dest_filepath).map_err(|err| Error::new(dest_dirpath, err))
     }
 
-    fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)> {
+    fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)> {
         open_file!(self.tmp_dirpath.join(filename))
     }
 
@@ -106,7 +136,7 @@ impl StubFs {
         Self::default()
     }
 
-    pub fn with_create_bin_file_fn<F: Fn(&str, &str) -> io::Result<(PathBuf, File)> + 'static>(
+    pub fn with_create_bin_file_fn<F: Fn(&str, &str) -> Result<(PathBuf, File)> + 'static>(
         mut self,
         create_bin_file_fn: F,
     ) -> Self {
@@ -114,7 +144,7 @@ impl StubFs {
         self
     }
 
-    pub fn with_create_bin_symlink_fn<F: Fn(&str, &str) -> io::Result<()> + 'static>(
+    pub fn with_create_bin_symlink_fn<F: Fn(&str, &str) -> Result<()> + 'static>(
         mut self,
         create_bin_symlink_fn: F,
     ) -> Self {
@@ -122,7 +152,7 @@ impl StubFs {
         self
     }
 
-    pub fn with_create_tmp_file_fn<F: Fn(&str) -> io::Result<(PathBuf, File)> + 'static>(
+    pub fn with_create_tmp_file_fn<F: Fn(&str) -> Result<(PathBuf, File)> + 'static>(
         mut self,
         create_tmp_file_fn: F,
     ) -> Self {
@@ -133,21 +163,21 @@ impl StubFs {
 
 #[cfg(test)]
 impl Fs for StubFs {
-    fn create_bin_file(&self, name: &str, version: &str) -> io::Result<(PathBuf, File)> {
+    fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)> {
         match &self.create_bin_file_fn {
             Some(create_bin_file_fn) => create_bin_file_fn(name, version),
             None => unimplemented!(),
         }
     }
 
-    fn create_bin_symlink(&self, name: &str, version: &str) -> io::Result<()> {
+    fn create_bin_symlink(&self, name: &str, version: &str) -> Result<()> {
         match &self.create_bin_symlink_fn {
             Some(create_bin_symlink_fn) => create_bin_symlink_fn(name, version),
             None => unimplemented!(),
         }
     }
 
-    fn create_tmp_file(&self, filename: &str) -> io::Result<(PathBuf, File)> {
+    fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)> {
         match &self.create_tmp_file_fn {
             Some(create_tmp_file_fn) => create_tmp_file_fn(filename),
             None => unimplemented!(),
@@ -164,13 +194,13 @@ impl Fs for StubFs {
 }
 
 #[cfg(test)]
-type CreateBinFileFn = dyn Fn(&str, &str) -> io::Result<(PathBuf, File)>;
+type CreateBinFileFn = dyn Fn(&str, &str) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
-type CreateBinSymlinkFn = dyn Fn(&str, &str) -> io::Result<()>;
+type CreateBinSymlinkFn = dyn Fn(&str, &str) -> Result<()>;
 
 #[cfg(test)]
-type CreateTmpFileFn = dyn Fn(&str) -> io::Result<(PathBuf, File)>;
+type CreateTmpFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
 mod test {
@@ -180,6 +210,37 @@ mod test {
         io::Write,
     };
     use tempfile::tempdir;
+
+    mod error {
+        use super::*;
+
+        mod new {
+            use super::*;
+
+            #[test]
+            fn should_return_error() {
+                let path = PathBuf::from("/error");
+                let source_kind = io::ErrorKind::PermissionDenied;
+                let source = io::Error::from(source_kind);
+                let err = Error::new(path.clone(), source);
+                assert_eq!(err.path(), path);
+                assert_eq!(err.source().kind(), source_kind);
+            }
+        }
+
+        mod to_string {
+            use super::*;
+
+            #[test]
+            fn should_return_string() {
+                let path = PathBuf::from("/error");
+                let source = io::Error::from(io::ErrorKind::PermissionDenied);
+                let expected = format!("I/O failed on {}: {}", path.display(), source);
+                let err = Error::new(path, source);
+                assert_eq!(err.to_string(), expected);
+            }
+        }
+    }
 
     mod default_fs {
         use super::*;

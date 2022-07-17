@@ -1,11 +1,10 @@
 pub mod terraform;
 
-use crate::{cfg::Config, util::downloader::*, util::zip::*};
+use crate::{cfg::Config, util::downloader::*, util::fs, util::zip::*};
 use std::{
     collections::{HashMap, HashSet},
     env::consts::{ARCH, OS},
     fmt::{self, Display, Formatter},
-    io,
 };
 
 pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
@@ -14,7 +13,7 @@ pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
 pub enum InstallError {
     UnsupportedOs(SupportedSystems),
     UnsupportedArch(SupportedSystems),
-    IoFailed(io::Error),
+    IoFailed(fs::Error),
     DownloadFailed(DownloadError),
     UnzipFailed(UnzipError),
 }
@@ -73,7 +72,7 @@ mod test {
     use super::*;
     use maplit::{hashmap, hashset};
     use reqwest::blocking::get;
-    use std::path::PathBuf;
+    use std::{io, path::PathBuf};
 
     mod install_error {
         use super::*;
@@ -116,7 +115,10 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let err = io::Error::from(io::ErrorKind::PermissionDenied);
+                    let err = fs::Error::new(
+                        PathBuf::from("/error"),
+                        io::Error::from(io::ErrorKind::PermissionDenied),
+                    );
                     let expected = err.to_string();
                     let err = InstallError::IoFailed(err);
                     assert_eq!(err.to_string(), expected);
