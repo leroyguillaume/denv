@@ -1,9 +1,13 @@
 #[cfg(test)]
 use crate::util::fs::StubFs;
-use crate::util::{
-    downloader::*,
-    fs::{DefaultFileSystem, FileSystem},
-    zip::*,
+use crate::{
+    tool::terraform::*,
+    tool::*,
+    util::{
+        downloader::*,
+        fs::{DefaultFileSystem, FileSystem},
+        zip::*,
+    },
 };
 use home::home_dir;
 use jsonschema::JSONSchema;
@@ -36,7 +40,7 @@ impl Display for LoadingError {
 }
 
 pub struct Config {
-    tools: Vec<ToolConfig>,
+    tools: Vec<Box<dyn Tool>>,
     pub(crate) fs: Box<dyn FileSystem>,
     pub(crate) downloader: Box<dyn Downloader>,
     pub(crate) unzipper: Box<dyn Unzipper>,
@@ -55,10 +59,10 @@ impl Config {
             let errs = err_iter.map(|err| err.to_string()).collect();
             return Err(LoadingError::InvalidConfig(errs));
         }
-        let mut tools = vec![];
+        let mut tools: Vec<Box<dyn Tool>> = vec![];
         if let Some(cfg_tools) = cfg.get("tools") {
             if let Some(cfg_tool) = cfg_tools.get("terraform") {
-                tools.push(ToolConfig::Terraform(cfg_tool.as_str().unwrap().into()));
+                tools.push(Box::new(Terraform(cfg_tool.as_str().unwrap().into())));
             }
         }
         let fs_root_dirpath = match home_dir() {
@@ -78,14 +82,9 @@ impl Config {
         Ok(cfg)
     }
 
-    pub fn tools(&self) -> &[ToolConfig] {
+    pub fn tools(&self) -> &[Box<dyn Tool>] {
         &self.tools
     }
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum ToolConfig {
-    Terraform(String),
 }
 
 #[cfg(test)]
@@ -142,7 +141,7 @@ mod test {
 
             #[test]
             fn should_return_config() {
-                let expected = vec![ToolConfig::Terraform("1.2.3".into())];
+                let expected: Vec<Box<dyn Tool>> = vec![Box::new(Terraform("1.2.3".into()))];
                 let cfg = Config::load(Path::new("resources/tests/config/denv.yml")).unwrap();
                 assert_eq!(cfg.tools(), expected);
             }

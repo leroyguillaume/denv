@@ -68,6 +68,10 @@ impl Tool for Terraform {
         Ok(())
     }
 
+    fn name(&self) -> &'static str {
+        TOOL_NAME
+    }
+
     fn version(&self) -> &str {
         &self.0
     }
@@ -351,6 +355,27 @@ mod test {
             tests!("linux", "x86_64");
             tests!("linux", "arm");
             tests!("linux", "aarch64");
+        }
+
+        mod name {
+            use super::*;
+
+            #[test]
+            fn should_return_name() {
+                let tf = Terraform("1.2.3".into());
+                assert_eq!(tf.name(), TOOL_NAME);
+            }
+        }
+
+        mod version {
+            use super::*;
+
+            #[test]
+            fn should_return_version() {
+                let version = "1.2.3";
+                let tf = Terraform(version.into());
+                assert_eq!(tf.version(), version);
+            }
         }
     }
 }

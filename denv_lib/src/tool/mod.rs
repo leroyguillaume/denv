@@ -4,7 +4,7 @@ use crate::{cfg::Config, util::downloader::*, util::fs, util::zip::*};
 use std::{
     collections::{HashMap, HashSet},
     env::consts::{ARCH, OS},
-    fmt::{self, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     path::PathBuf,
 };
 
@@ -68,10 +68,18 @@ impl Display for InstallError {
     }
 }
 
-pub trait Tool {
+pub trait Tool: Debug {
     fn install(&self, cfg: &Config) -> Result<(), InstallError>;
 
+    fn name(&self) -> &'static str;
+
     fn version(&self) -> &str;
+}
+
+impl PartialEq for dyn Tool {
+    fn eq(&self, tool: &dyn Tool) -> bool {
+        self.name() == tool.name() && self.version() == tool.version()
+    }
 }
 
 #[cfg(test)]
