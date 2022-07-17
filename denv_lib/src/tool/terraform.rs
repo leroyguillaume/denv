@@ -81,6 +81,7 @@ impl Tool for Terraform {
 mod test {
     use super::*;
     use crate::util::{downloader::*, fs::*, zip::*};
+    use reqwest::blocking::get;
     use std::{fs::File, path::PathBuf};
     use tempfile::tempdir;
 
@@ -196,7 +197,8 @@ mod test {
                                     expected_version, expected_version, os, arch
                                 );
                                 assert_eq!(url, expected_url);
-                                Err(DownloadError::RequestFailed(404, String::new()))
+                                let resp = get("https://fr.archive.ubuntu.com/ubuntu2/").unwrap();
+                                Err(DownloadError::RequestFailed(resp))
                             });
                         let unziper = StubUnzipper::new();
                         let cfg = Config::stub(fs, downloader, unziper);

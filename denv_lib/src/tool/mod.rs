@@ -72,6 +72,7 @@ pub trait Tool {
 mod test {
     use super::*;
     use maplit::{hashmap, hashset};
+    use reqwest::blocking::get;
     use std::path::PathBuf;
 
     mod install_error {
@@ -127,7 +128,8 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let err = DownloadError::RequestFailed(404, "not found".into());
+                    let resp = get("https://fr.archive.ubuntu.com/ubuntu2/").unwrap();
+                    let err = DownloadError::RequestFailed(resp);
                     let expected = err.to_string();
                     let err = InstallError::DownloadFailed(err);
                     assert_eq!(err.to_string(), expected);

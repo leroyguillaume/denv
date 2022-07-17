@@ -1,5 +1,8 @@
 use log::{debug, trace};
-use reqwest::{self, blocking::get};
+use reqwest::{
+    self,
+    blocking::{get, Response},
+};
 use std::{
     fmt::{self, Display, Formatter},
     io::{BufWriter, Write},
@@ -8,16 +11,28 @@ use std::{
 #[derive(Debug)]
 pub enum DownloadError {
     RequestProcessingFailed(reqwest::Error),
-    RequestFailed(u16, String),
+    RequestFailed(Response),
     WritingFailed(reqwest::Error),
 }
 
 impl Display for DownloadError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::RequestProcessingFailed(err) => write!(f, "Unable to process request: {}", err),
-            Self::RequestFailed(status, content) => {
-                write!(f, "Server sent an error {}: {}", status, content)
+            Self::RequestProcessingFailed(err) => write!(
+                f,
+                "GET {} failed: {}",
+                err.url()
+                    .map(|url| url.to_string())
+                    .unwrap_or_else(|| "?".into()),
+                err
+            ),
+            Self::RequestFailed(resp) => {
+                write!(
+                    f,
+                    "GET {} returned an error {}",
+                    resp.url(),
+                    resp.status().as_u16()
+                )
             }
             Self::WritingFailed(err) => {
                 write!(f, "Unable to write response content to file: {}", err)
@@ -40,8 +55,7 @@ impl Downloader for DefaultDownloader {
         let status = resp.status();
         debug!("Server sent status code {}", status.as_u16());
         if !status.is_success() {
-            let content = resp.text().unwrap_or_default();
-            return Err(DownloadError::RequestFailed(status.as_u16(), content));
+            return Err(DownloadError::RequestFailed(resp));
         }
         let size = resp
             .copy_to(&mut buf)
@@ -113,8 +127,9 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let err = get("htpp://localhost:1234").unwrap_err();
-                    let expected = format!("Unable to process request: {}", err);
+                    let url = "htpp://localhost:1234";
+                    let err = get(url).unwrap_err();
+                    let expected = format!("GET {} failed: {}", url, err);
                     let err = DownloadError::RequestProcessingFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
@@ -126,10 +141,12 @@ mod test {
                 #[test]
                 fn should_return_string() {
                     let resp = get("https://fr.archive.ubuntu.com/ubuntu2/").unwrap();
-                    let status = resp.status().as_u16();
-                    let content = resp.text().unwrap();
-                    let expected = format!("Server sent an error {}: {}", status, content);
-                    let err = DownloadError::RequestFailed(status, content);
+                    let expected = format!(
+                        "GET {} returned an error {}",
+                        resp.url(),
+                        resp.status().as_u16()
+                    );
+                    let err = DownloadError::RequestFailed(resp);
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -173,14 +190,9 @@ mod test {
             fn should_return_request_failed_err() {
                 let url = "https://fr.archive.ubuntu.com/ubuntu2/";
                 let mut out = vec![];
-                let expected = get(url).unwrap();
                 match DefaultDownloader.download(url, &mut out) {
                     Ok(_) => panic!("should fail"),
-                    Err(DownloadError::RequestFailed(status, content)) => {
-                        assert_eq!(status, expected.status().as_u16());
-                        assert_eq!(content, expected.text().unwrap());
-                        assert!(out.is_empty());
-                    }
+                    Err(DownloadError::RequestFailed(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
