@@ -17,13 +17,9 @@ macro_rules! supported_systems {
 const TOOL_NAME: &str = "terraform";
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Terraform(String);
+pub struct Terraform(pub String);
 
 impl Terraform {
-    pub fn new(version: String) -> Self {
-        Self(version)
-    }
-
     fn arch(&self) -> Result<&'static str, InstallError> {
         match ARCH {
             "x86" => Ok("386"),
@@ -88,18 +84,6 @@ mod test {
     mod terraform {
         use super::*;
 
-        mod new {
-            use super::*;
-
-            #[test]
-            fn should_return_tool() {
-                let expected = Terraform("1.2.3".into());
-                let tf = Terraform::new(expected.0.clone());
-                assert_eq!(tf, expected);
-                assert_eq!(tf.version(), expected.0);
-            }
-        }
-
         mod arch {
             use super::*;
 
@@ -149,7 +133,7 @@ mod test {
                     #[cfg(all(target_os = $os, target_arch = $arch))]
                     fn should_return_file_system_writing_failed_failed_err_if_tmp_file_creation_failed() {
                         let expected_version = "1.2.3";
-                        let tf = Terraform::new(expected_version.into());
+                        let tf = Terraform(expected_version.into());
                         let os = tf.os().unwrap();
                         let arch = tf.arch().unwrap();
                         let fs = StubFs::new()
@@ -174,7 +158,7 @@ mod test {
                     #[cfg(all(target_os = $os, target_arch = $arch))]
                     fn should_return_download_failed_err() {
                         let expected_version = "1.2.3";
-                        let tf = Terraform::new(expected_version.into());
+                        let tf = Terraform(expected_version.into());
                         let os = tf.os().unwrap();
                         let arch = tf.arch().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
@@ -213,7 +197,7 @@ mod test {
                     #[cfg(all(target_os = $os, target_arch = $arch))]
                     fn should_return_file_system_writing_failed_err_if_bin_file_creation_failed() {
                         let expected_version = "1.2.3";
-                        let tf = Terraform::new(expected_version.into());
+                        let tf = Terraform(expected_version.into());
                         let os = tf.os().unwrap();
                         let arch = tf.arch().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
@@ -256,7 +240,7 @@ mod test {
                     #[cfg(all(target_os = $os, target_arch = $arch))]
                     fn should_return_unzip_failed_err() {
                         let expected_version = "1.2.3";
-                        let tf = Terraform::new(expected_version.into());
+                        let tf = Terraform(expected_version.into());
                         let os = tf.os().unwrap();
                         let arch = tf.arch().unwrap();
                         let expected_zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
@@ -315,7 +299,7 @@ mod test {
                     #[cfg(all(target_os = $os, target_arch = $arch))]
                     fn should_install_terraform() {
                         let expected_version = "1.2.3";
-                        let tf = Terraform::new(expected_version.into());
+                        let tf = Terraform(expected_version.into());
                         let os = tf.os().unwrap();
                         let arch = tf.arch().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
