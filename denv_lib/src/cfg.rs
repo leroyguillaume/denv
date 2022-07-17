@@ -28,9 +28,9 @@ impl Display for LoadingError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Self::FileOpeningFailed(err) => write!(f, "{}", err),
-            Self::InvalidYaml(err) => write!(f, "invalid YAML syntax: {}", err),
-            Self::InvalidConfig(_) => write!(f, "invalid configuration file"),
-            Self::HomeDirNotFound => write!(f, "unable to get user home directory"),
+            Self::InvalidYaml(err) => write!(f, "Invalid YAML syntax: {}", err),
+            Self::InvalidConfig(_) => write!(f, "Invalid configuration file"),
+            Self::HomeDirNotFound => write!(f, "Unable to get user home directory"),
         }
     }
 }
@@ -173,7 +173,7 @@ mod test {
                 #[test]
                 fn should_return_string() {
                     let err = serde_yaml::from_str::<serde_yaml::Value>("{").unwrap_err();
-                    let expected = format!("invalid YAML syntax: {}", err);
+                    let expected = format!("Invalid YAML syntax: {}", err);
                     let err = LoadingError::InvalidYaml(err);
                     assert_eq!(err.to_string(), expected);
                 }
@@ -185,7 +185,7 @@ mod test {
                 #[test]
                 fn should_return_string() {
                     let err = LoadingError::InvalidConfig(vec![]);
-                    assert_eq!(err.to_string(), "invalid configuration file");
+                    assert_eq!(err.to_string(), "Invalid configuration file");
                 }
             }
 
@@ -194,7 +194,7 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let expected = "unable to get user home directory";
+                    let expected = "Unable to get user home directory";
                     assert_eq!(LoadingError::HomeDirNotFound.to_string(), expected);
                 }
             }

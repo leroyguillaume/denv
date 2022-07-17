@@ -50,7 +50,7 @@ impl Display for InstallError {
             ),
             Self::UnsupportedArch(supported_systems) => write!(
                 f,
-                "architecture '{}' is not supported for OS '{}' (must be one of {})",
+                "Architecture '{}' is not supported for OS '{}' (must be one of {})",
                 ARCH,
                 OS,
                 self.fmt_supported_systems(supported_systems)
@@ -59,7 +59,7 @@ impl Display for InstallError {
             Self::DownloadFailed(err) => write!(f, "{}", err),
             Self::UnzipFailed(zip_filepath, filepath, err) => write!(
                 f,
-                "unzip {} from {} failed: {}",
+                "Unzip {} from {} failed: {}",
                 filepath,
                 zip_filepath.display(),
                 err
@@ -112,7 +112,7 @@ mod test {
                         "macos" => hashset!("arm", "aarch64"),
                     };
                     let err = InstallError::UnsupportedArch(supported_systems);
-                    let expected = format!("architecture '{}' is not supported for OS '{}' (must be one of [linux x86, linux x86_64, macos aarch64, macos arm])", ARCH, OS);
+                    let expected = format!("Architecture '{}' is not supported for OS '{}' (must be one of [linux x86, linux x86_64, macos aarch64, macos arm])", ARCH, OS);
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -156,7 +156,7 @@ mod test {
                         io::ErrorKind::PermissionDenied,
                     ));
                     let expected = format!(
-                        "unzip {} from {} failed: {}",
+                        "Unzip {} from {} failed: {}",
                         filepath,
                         zip_filepath.display(),
                         err
