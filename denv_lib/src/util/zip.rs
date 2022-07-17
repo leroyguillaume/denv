@@ -55,6 +55,9 @@ impl Unzipper for DefaultUnzipper {
 }
 
 #[cfg(test)]
+type UnzipFn = dyn Fn(&Path, &str, &mut dyn Write) -> Result<(), UnzipError>;
+
+#[cfg(test)]
 #[derive(Default)]
 pub struct StubUnzipper {
     unzip_fn: Option<Box<UnzipFn>>,
@@ -91,9 +94,6 @@ impl Unzipper for StubUnzipper {
 }
 
 #[cfg(test)]
-type UnzipFn = dyn Fn(&Path, &str, &mut dyn Write) -> Result<(), UnzipError>;
-
-#[cfg(test)]
 mod test {
     use super::*;
     use std::{
@@ -101,59 +101,6 @@ mod test {
         fs::{create_dir_all, File},
     };
     use tempfile::{tempdir, tempfile};
-
-    mod unziper {
-        use super::*;
-
-        mod unzip {
-            use super::*;
-
-            #[test]
-            fn should_return_file_opening_failed_err() {
-                let zip_filepath = temp_dir().join("test");
-                let mut out = vec![];
-                match DefaultUnzipper.unzip(&zip_filepath, "test", &mut out) {
-                    Ok(_) => panic!("should fail"),
-                    Err(UnzipError::FileOpeningFailed(_)) => {}
-                    Err(err) => panic!("{}", err),
-                }
-            }
-
-            #[test]
-            fn should_return_invalid_zip_file_err() {
-                let dirpath = tempdir().unwrap().into_path();
-                create_dir_all(&dirpath).unwrap();
-                let zip_filepath = dirpath.join("test");
-                let _ = File::create(&zip_filepath).unwrap();
-                let mut out = vec![];
-                match DefaultUnzipper.unzip(&zip_filepath, "test", &mut out) {
-                    Ok(_) => panic!("should fail"),
-                    Err(UnzipError::InvalidZipFile(_)) => {}
-                    Err(err) => panic!("{}", err),
-                }
-            }
-
-            #[test]
-            fn should_return_unzip_failed_err() {
-                let zip_filepath = Path::new("resources/tests/unziper/test.zip");
-                let filepath = "test2";
-                let mut out = vec![];
-                match DefaultUnzipper.unzip(zip_filepath, filepath, &mut out) {
-                    Ok(_) => panic!("should fail"),
-                    Err(UnzipError::UnzipFailed(_)) => {}
-                    Err(err) => panic!("{}", err),
-                }
-            }
-
-            #[test]
-            fn should_extract_file() {
-                let mut out = vec![];
-                let filepath = Path::new("resources/tests/unziper/test.zip");
-                DefaultUnzipper.unzip(filepath, "test", &mut out).unwrap();
-                assert_eq!(String::from_utf8(out).unwrap(), "test\n");
-            }
-        }
-    }
 
     mod unzip_error {
         use super::*;
@@ -209,6 +156,59 @@ mod test {
                     let err = UnzipError::DestinationWritingFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
+            }
+        }
+    }
+
+    mod unzipper {
+        use super::*;
+
+        mod unzip {
+            use super::*;
+
+            #[test]
+            fn should_return_file_opening_failed_err() {
+                let zip_filepath = temp_dir().join("test");
+                let mut out = vec![];
+                match DefaultUnzipper.unzip(&zip_filepath, "test", &mut out) {
+                    Ok(_) => panic!("should fail"),
+                    Err(UnzipError::FileOpeningFailed(_)) => {}
+                    Err(err) => panic!("{}", err),
+                }
+            }
+
+            #[test]
+            fn should_return_invalid_zip_file_err() {
+                let dirpath = tempdir().unwrap().into_path();
+                create_dir_all(&dirpath).unwrap();
+                let zip_filepath = dirpath.join("test");
+                let _ = File::create(&zip_filepath).unwrap();
+                let mut out = vec![];
+                match DefaultUnzipper.unzip(&zip_filepath, "test", &mut out) {
+                    Ok(_) => panic!("should fail"),
+                    Err(UnzipError::InvalidZipFile(_)) => {}
+                    Err(err) => panic!("{}", err),
+                }
+            }
+
+            #[test]
+            fn should_return_unzip_failed_err() {
+                let zip_filepath = Path::new("resources/tests/unziper/test.zip");
+                let filepath = "test2";
+                let mut out = vec![];
+                match DefaultUnzipper.unzip(zip_filepath, filepath, &mut out) {
+                    Ok(_) => panic!("should fail"),
+                    Err(UnzipError::UnzipFailed(_)) => {}
+                    Err(err) => panic!("{}", err),
+                }
+            }
+
+            #[test]
+            fn should_extract_file() {
+                let mut out = vec![];
+                let filepath = Path::new("resources/tests/unziper/test.zip");
+                DefaultUnzipper.unzip(filepath, "test", &mut out).unwrap();
+                assert_eq!(String::from_utf8(out).unwrap(), "test\n");
             }
         }
     }

@@ -123,6 +123,15 @@ impl Fs for DefaultFs {
 }
 
 #[cfg(test)]
+type CreateBinFileFn = dyn Fn(&str, &str) -> Result<(PathBuf, File)>;
+
+#[cfg(test)]
+type CreateBinSymlinkFn = dyn Fn(&str, &str) -> Result<()>;
+
+#[cfg(test)]
+type CreateTmpFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
+
+#[cfg(test)]
 #[derive(Default)]
 pub struct StubFs {
     create_bin_file_fn: Option<Box<CreateBinFileFn>>,
@@ -192,15 +201,6 @@ impl Fs for StubFs {
         Path::new("tmp")
     }
 }
-
-#[cfg(test)]
-type CreateBinFileFn = dyn Fn(&str, &str) -> Result<(PathBuf, File)>;
-
-#[cfg(test)]
-type CreateBinSymlinkFn = dyn Fn(&str, &str) -> Result<()>;
-
-#[cfg(test)]
-type CreateTmpFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
 mod test {

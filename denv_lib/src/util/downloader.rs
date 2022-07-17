@@ -64,6 +64,9 @@ impl Downloader for DefaultDownloader {
 }
 
 #[cfg(test)]
+type DownloadFn = dyn Fn(&str, &mut dyn Write) -> Result<(), DownloadError>;
+
+#[cfg(test)]
 #[derive(Default)]
 pub struct StubDownloader {
     download_fn: Option<Box<DownloadFn>>,
@@ -93,9 +96,6 @@ impl Downloader for StubDownloader {
         }
     }
 }
-
-#[cfg(test)]
-type DownloadFn = dyn Fn(&str, &mut dyn Write) -> Result<(), DownloadError>;
 
 #[cfg(test)]
 mod test {
