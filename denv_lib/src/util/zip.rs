@@ -10,8 +10,8 @@ use zip::{result::ZipError, ZipArchive};
 #[derive(Debug)]
 pub enum UnzipError {
     FileOpeningFailed(PathBuf, io::Error),
-    UnzipFailed(PathBuf, ZipError),
-    UnzipFileFailed(PathBuf, String, ZipError),
+    InvalidZipFile(PathBuf, ZipError),
+    UnzipFailed(PathBuf, String, ZipError),
     DestinationWritingFailed(io::Error),
 }
 
@@ -21,10 +21,10 @@ impl Display for UnzipError {
             Self::FileOpeningFailed(path, err) => {
                 write!(f, "Unable to open {}: {}", path.display(), err)
             }
-            Self::UnzipFailed(path, err) => {
+            Self::InvalidZipFile(path, err) => {
                 write!(f, "Unable to unzip {}: {}", path.display(), err)
             }
-            Self::UnzipFileFailed(path, filename, err) => write!(
+            Self::UnzipFailed(path, filename, err) => write!(
                 f,
                 "Unable to unzip {} from {}: {}",
                 filename,
@@ -61,9 +61,9 @@ impl Unzipper for DefaultUnzipper {
             .map_err(|err| UnzipError::FileOpeningFailed(zip_filepath.to_path_buf(), err))?;
         let zip_file_buf = BufReader::new(zip_file);
         let mut zip = ZipArchive::new(zip_file_buf)
-            .map_err(|err| UnzipError::UnzipFailed(zip_filepath.to_path_buf(), err))?;
+            .map_err(|err| UnzipError::InvalidZipFile(zip_filepath.to_path_buf(), err))?;
         let mut tgt_file = zip.by_name(filename).map_err(|err| {
-            UnzipError::UnzipFileFailed(zip_filepath.to_path_buf(), filename.into(), err)
+            UnzipError::UnzipFailed(zip_filepath.to_path_buf(), filename.into(), err)
         })?;
         copy(&mut tgt_file, dest).map_err(UnzipError::DestinationWritingFailed)?;
         Ok(())
@@ -138,7 +138,7 @@ mod test {
             }
 
             #[test]
-            fn should_return_unzip_failed_err() {
+            fn should_return_invalid_zip_file_err() {
                 let dirpath = tempdir().unwrap().into_path();
                 create_dir_all(&dirpath).unwrap();
                 let expected_zip_filepath = dirpath.join("test");
@@ -146,7 +146,7 @@ mod test {
                 let mut out = vec![];
                 match DefaultUnzipper.unzip(&expected_zip_filepath, "test", &mut out) {
                     Ok(_) => panic!("should fail"),
-                    Err(UnzipError::UnzipFailed(zip_filepath, _)) => {
+                    Err(UnzipError::InvalidZipFile(zip_filepath, _)) => {
                         assert_eq!(zip_filepath, expected_zip_filepath);
                     }
                     Err(err) => panic!("{}", err),
@@ -154,13 +154,13 @@ mod test {
             }
 
             #[test]
-            fn should_return_unzip_file_failed_err() {
+            fn should_return_unzip_failed_err() {
                 let expected_zip_filepath = Path::new("resources/tests/unziper/test.zip");
                 let expected_filename = "test2";
                 let mut out = vec![];
                 match DefaultUnzipper.unzip(expected_zip_filepath, expected_filename, &mut out) {
                     Ok(_) => panic!("should fail"),
-                    Err(UnzipError::UnzipFileFailed(zip_filepath, filename, _)) => {
+                    Err(UnzipError::UnzipFailed(zip_filepath, filename, _)) => {
                         assert_eq!(zip_filepath, expected_zip_filepath);
                         assert_eq!(filename, expected_filename);
                     }
@@ -197,7 +197,7 @@ mod test {
                 }
             }
 
-            mod unzip_failed {
+            mod invalid_zip_file {
                 use super::*;
 
                 #[test]
@@ -206,12 +206,12 @@ mod test {
                     let file = tempfile().unwrap();
                     let err = ZipArchive::new(file).unwrap_err();
                     let expected = format!("Unable to unzip {}: {}", filepath.display(), err);
-                    let err = UnzipError::UnzipFailed(filepath.to_path_buf(), err);
+                    let err = UnzipError::InvalidZipFile(filepath.to_path_buf(), err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
 
-            mod unzip_file_failed {
+            mod unzip_failed {
                 use super::*;
 
                 #[test]
@@ -226,8 +226,7 @@ mod test {
                         filepath.display(),
                         err
                     );
-                    let err =
-                        UnzipError::UnzipFileFailed(filepath.to_path_buf(), filename.into(), err);
+                    let err = UnzipError::UnzipFailed(filepath.to_path_buf(), filename.into(), err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
