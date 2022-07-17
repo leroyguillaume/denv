@@ -34,9 +34,7 @@ impl Display for DownloadError {
                     resp.status().as_u16()
                 )
             }
-            Self::WritingFailed(err) => {
-                write!(f, "Unable to write response content to file: {}", err)
-            }
+            Self::WritingFailed(err) => write!(f, "I/O failed: {}", err),
         }
     }
 }
@@ -161,7 +159,7 @@ mod test {
                         .unwrap()
                         .copy_to(&mut out)
                         .unwrap_err();
-                    let expected = format!("Unable to write response content to file: {}", err);
+                    let expected = format!("I/O failed: {}", err);
                     let err = DownloadError::WritingFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
