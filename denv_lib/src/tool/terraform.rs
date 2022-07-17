@@ -67,7 +67,7 @@ impl Tool for Terraform {
         let mut file_buf = BufWriter::new(bin_file);
         cfg.unzipper
             .unzip(&zip_filepath, TOOL_NAME, &mut file_buf)
-            .map_err(InstallError::UnzipFailed)?;
+            .map_err(|err| InstallError::UnzipFailed(zip_filepath, TOOL_NAME.into(), err))?;
         info!("{} v{} installed", TOOL_NAME, &self.0);
         Ok(())
     }
@@ -259,17 +259,17 @@ mod test {
                         let tf = Terraform::new(expected_version.into());
                         let os = tf.os().unwrap();
                         let arch = tf.arch().unwrap();
-                        let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
+                        let expected_zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
                         let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
                         let fs = StubFs::new()
                             .with_create_tmp_file_fn({
-                                let zip_filepath = zip_filepath.clone();
+                                let expected_zip_filepath = expected_zip_filepath.clone();
                                 move |filename| {
                                     let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
                                     assert_eq!(filename, expected);
                                     Ok((
-                                        zip_filepath.clone(),
-                                        File::create(&zip_filepath).map_err(|err| fs::Error::new(zip_filepath.clone(), err))?
+                                        expected_zip_filepath.clone(),
+                                        File::create(&expected_zip_filepath).map_err(|err| fs::Error::new(expected_zip_filepath.clone(), err))?
                                     ))
                                 }
                             })
@@ -291,18 +291,22 @@ mod test {
                                 Ok(())
                             });
                         let unziper = StubUnzipper::new()
-                            .with_unzip_fn(move |filepath, filename, _| {
-                                assert_eq!(filepath, zip_filepath);
+                            .with_unzip_fn({
+                                let expected_zip_filepath = expected_zip_filepath.clone();
+                                move |zip_filepath, filename, _| {
+                                assert_eq!(zip_filepath, expected_zip_filepath);
                                 assert_eq!(filename, TOOL_NAME);
                                 Err(UnzipError::FileOpeningFailed(
-                                    PathBuf::from("terraform.zip"),
                                     io::Error::from(io::ErrorKind::PermissionDenied)
                                 ))
-                            });
+                    }});
                         let cfg = Config::stub(fs, downloader, unziper);
                         match tf.install(&cfg) {
                             Ok(_) => panic!("should fail"),
-                            Err(InstallError::UnzipFailed(_)) => {}
+                            Err(InstallError::UnzipFailed(zip_filepath, filepath, _)) => {
+                                assert_eq!(zip_filepath, expected_zip_filepath);
+                                assert_eq!(filepath, TOOL_NAME);
+                            },
                             Err(err) => panic!("{}", err),
                         }
                     }

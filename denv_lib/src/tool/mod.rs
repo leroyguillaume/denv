@@ -5,6 +5,7 @@ use std::{
     collections::{HashMap, HashSet},
     env::consts::{ARCH, OS},
     fmt::{self, Display, Formatter},
+    path::PathBuf,
 };
 
 pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
@@ -15,7 +16,7 @@ pub enum InstallError {
     UnsupportedArch(SupportedSystems),
     IoFailed(fs::Error),
     DownloadFailed(DownloadError),
-    UnzipFailed(UnzipError),
+    UnzipFailed(PathBuf, String, UnzipError),
 }
 
 impl InstallError {
@@ -56,7 +57,13 @@ impl Display for InstallError {
             ),
             Self::IoFailed(err) => write!(f, "{}", err),
             Self::DownloadFailed(err) => write!(f, "{}", err),
-            Self::UnzipFailed(err) => write!(f, "{}", err),
+            Self::UnzipFailed(zip_filepath, filepath, err) => write!(
+                f,
+                "unzip {} from {} failed: {}",
+                filepath,
+                zip_filepath.display(),
+                err
+            ),
         }
     }
 }
@@ -143,12 +150,18 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let err = UnzipError::FileOpeningFailed(
-                        PathBuf::from("terraform.zip"),
-                        io::Error::from(io::ErrorKind::PermissionDenied),
+                    let zip_filepath = PathBuf::from("/error");
+                    let filepath = "file";
+                    let err = UnzipError::FileOpeningFailed(io::Error::from(
+                        io::ErrorKind::PermissionDenied,
+                    ));
+                    let expected = format!(
+                        "unzip {} from {} failed: {}",
+                        filepath,
+                        zip_filepath.display(),
+                        err
                     );
-                    let expected = err.to_string();
-                    let err = InstallError::UnzipFailed(err);
+                    let err = InstallError::UnzipFailed(zip_filepath, filepath.into(), err);
                     assert_eq!(err.to_string(), expected);
                 }
             }

@@ -3,37 +3,25 @@ use std::{
     fmt::{self, Display, Formatter},
     fs::File,
     io::{self, copy, BufReader, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 use zip::{result::ZipError, ZipArchive};
 
 #[derive(Debug)]
 pub enum UnzipError {
-    FileOpeningFailed(PathBuf, io::Error),
-    InvalidZipFile(PathBuf, ZipError),
-    UnzipFailed(PathBuf, String, ZipError),
+    FileOpeningFailed(io::Error),
+    InvalidZipFile(ZipError),
+    UnzipFailed(ZipError),
     DestinationWritingFailed(io::Error),
 }
 
 impl Display for UnzipError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::FileOpeningFailed(path, err) => {
-                write!(f, "Unable to open {}: {}", path.display(), err)
-            }
-            Self::InvalidZipFile(path, err) => {
-                write!(f, "Unable to unzip {}: {}", path.display(), err)
-            }
-            Self::UnzipFailed(path, filename, err) => write!(
-                f,
-                "Unable to unzip {} from {}: {}",
-                filename,
-                path.display(),
-                err
-            ),
-            Self::DestinationWritingFailed(err) => {
-                write!(f, "Unable to write unzipped file: {}", err)
-            }
+            Self::FileOpeningFailed(err) => write!(f, "{}", err),
+            Self::InvalidZipFile(err) => write!(f, "{}", err),
+            Self::UnzipFailed(err) => write!(f, "{}", err),
+            Self::DestinationWritingFailed(err) => write!(f, "{}", err),
         }
     }
 }
@@ -53,18 +41,14 @@ impl Unzipper for DefaultUnzipper {
     fn unzip(
         &self,
         zip_filepath: &Path,
-        filename: &str,
+        filepath: &str,
         dest: &mut dyn Write,
     ) -> Result<(), UnzipError> {
-        debug!("Unzipping {} from {}", filename, zip_filepath.display());
-        let zip_file = File::open(zip_filepath)
-            .map_err(|err| UnzipError::FileOpeningFailed(zip_filepath.to_path_buf(), err))?;
+        debug!("Unzipping {} from {}", filepath, zip_filepath.display());
+        let zip_file = File::open(zip_filepath).map_err(UnzipError::FileOpeningFailed)?;
         let zip_file_buf = BufReader::new(zip_file);
-        let mut zip = ZipArchive::new(zip_file_buf)
-            .map_err(|err| UnzipError::InvalidZipFile(zip_filepath.to_path_buf(), err))?;
-        let mut tgt_file = zip.by_name(filename).map_err(|err| {
-            UnzipError::UnzipFailed(zip_filepath.to_path_buf(), filename.into(), err)
-        })?;
+        let mut zip = ZipArchive::new(zip_file_buf).map_err(UnzipError::InvalidZipFile)?;
+        let mut tgt_file = zip.by_name(filepath).map_err(UnzipError::UnzipFailed)?;
         copy(&mut tgt_file, dest).map_err(UnzipError::DestinationWritingFailed)?;
         Ok(())
     }
@@ -126,13 +110,11 @@ mod test {
 
             #[test]
             fn should_return_file_opening_failed_err() {
-                let expected = temp_dir().join("test");
+                let zip_filepath = temp_dir().join("test");
                 let mut out = vec![];
-                match DefaultUnzipper.unzip(&expected, "test", &mut out) {
+                match DefaultUnzipper.unzip(&zip_filepath, "test", &mut out) {
                     Ok(_) => panic!("should fail"),
-                    Err(UnzipError::FileOpeningFailed(filepath, _)) => {
-                        assert_eq!(filepath, expected)
-                    }
+                    Err(UnzipError::FileOpeningFailed(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
@@ -141,29 +123,24 @@ mod test {
             fn should_return_invalid_zip_file_err() {
                 let dirpath = tempdir().unwrap().into_path();
                 create_dir_all(&dirpath).unwrap();
-                let expected_zip_filepath = dirpath.join("test");
-                let _ = File::create(&expected_zip_filepath).unwrap();
+                let zip_filepath = dirpath.join("test");
+                let _ = File::create(&zip_filepath).unwrap();
                 let mut out = vec![];
-                match DefaultUnzipper.unzip(&expected_zip_filepath, "test", &mut out) {
+                match DefaultUnzipper.unzip(&zip_filepath, "test", &mut out) {
                     Ok(_) => panic!("should fail"),
-                    Err(UnzipError::InvalidZipFile(zip_filepath, _)) => {
-                        assert_eq!(zip_filepath, expected_zip_filepath);
-                    }
+                    Err(UnzipError::InvalidZipFile(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
 
             #[test]
             fn should_return_unzip_failed_err() {
-                let expected_zip_filepath = Path::new("resources/tests/unziper/test.zip");
-                let expected_filename = "test2";
+                let zip_filepath = Path::new("resources/tests/unziper/test.zip");
+                let filepath = "test2";
                 let mut out = vec![];
-                match DefaultUnzipper.unzip(expected_zip_filepath, expected_filename, &mut out) {
+                match DefaultUnzipper.unzip(zip_filepath, filepath, &mut out) {
                     Ok(_) => panic!("should fail"),
-                    Err(UnzipError::UnzipFailed(zip_filepath, filename, _)) => {
-                        assert_eq!(zip_filepath, expected_zip_filepath);
-                        assert_eq!(filename, expected_filename);
-                    }
+                    Err(UnzipError::UnzipFailed(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
@@ -189,10 +166,9 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let filepath = Path::new("terraform.zip");
                     let err = io::Error::from(io::ErrorKind::PermissionDenied);
-                    let expected = format!("Unable to open {}: {}", filepath.display(), err);
-                    let err = UnzipError::FileOpeningFailed(filepath.to_path_buf(), err);
+                    let expected = err.to_string();
+                    let err = UnzipError::FileOpeningFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -202,11 +178,10 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let filepath = Path::new("terraform.zip");
                     let file = tempfile().unwrap();
                     let err = ZipArchive::new(file).unwrap_err();
-                    let expected = format!("Unable to unzip {}: {}", filepath.display(), err);
-                    let err = UnzipError::InvalidZipFile(filepath.to_path_buf(), err);
+                    let expected = err.to_string();
+                    let err = UnzipError::InvalidZipFile(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -216,17 +191,10 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let filepath = Path::new("terraform.zip");
-                    let filename = "terraform";
                     let file = tempfile().unwrap();
                     let err = ZipArchive::new(file).unwrap_err();
-                    let expected = format!(
-                        "Unable to unzip {} from {}: {}",
-                        filename,
-                        filepath.display(),
-                        err
-                    );
-                    let err = UnzipError::UnzipFailed(filepath.to_path_buf(), filename.into(), err);
+                    let expected = err.to_string();
+                    let err = UnzipError::UnzipFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -237,7 +205,7 @@ mod test {
                 #[test]
                 fn should_return_string() {
                     let err = io::Error::from(io::ErrorKind::PermissionDenied);
-                    let expected = format!("Unable to write unzipped file: {}", err);
+                    let expected = err.to_string();
                     let err = UnzipError::DestinationWritingFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
