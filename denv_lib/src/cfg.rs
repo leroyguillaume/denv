@@ -17,24 +17,20 @@ use std::{
 };
 
 #[derive(Debug)]
-pub enum LoadingError<'a> {
-    FileOpeningFailed(&'a Path, io::Error),
+pub enum LoadingError {
+    FileOpeningFailed(io::Error),
     InvalidYaml(serde_yaml::Error),
     InvalidConfig(Vec<String>),
     HomeDirNotFound,
 }
 
-impl Display for LoadingError<'_> {
+impl Display for LoadingError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::FileOpeningFailed(path, err) => {
-                write!(f, "Unable to open {}: {}", path.display(), err)
-            }
-            Self::InvalidYaml(err) => write!(f, "Invalid YAML syntax: {}", err),
-            Self::InvalidConfig(errs) => {
-                write!(f, "Invalid configuration file:\n{}", errs.join("\n"))
-            }
-            Self::HomeDirNotFound => write!(f, "Unable to find user home directory"),
+            Self::FileOpeningFailed(err) => write!(f, "{}", err),
+            Self::InvalidYaml(err) => write!(f, "invalid YAML syntax: {}", err),
+            Self::InvalidConfig(_) => write!(f, "invalid configuration file"),
+            Self::HomeDirNotFound => write!(f, "unable to get user home directory"),
         }
     }
 }
@@ -49,17 +45,15 @@ pub struct Config {
 impl Config {
     pub fn load(filepath: &Path) -> Result<Self, LoadingError> {
         debug!("Loading configuration from {}", filepath.display());
-        let cfg = read_to_string(filepath)
-            .map_err(|err| LoadingError::FileOpeningFailed(filepath, err))?;
+        let cfg = read_to_string(filepath).map_err(LoadingError::FileOpeningFailed)?;
         let cfg =
             serde_yaml::from_str::<serde_json::Value>(&cfg).map_err(LoadingError::InvalidYaml)?;
         let schema = include_str!("../resources/main/config.schema.json");
         let schema = serde_json::from_str(schema).unwrap();
         let schema = JSONSchema::compile(&schema).unwrap();
         if let Err(err_iter) = schema.validate(&cfg) {
-            let errs: Vec<String> = err_iter.map(|err| err.to_string()).collect();
-            let err = LoadingError::InvalidConfig(errs);
-            return Err(err);
+            let errs = err_iter.map(|err| err.to_string()).collect();
+            return Err(LoadingError::InvalidConfig(errs));
         }
         let mut tools = vec![];
         if let Some(cfg_tools) = cfg.get("tools") {
@@ -121,9 +115,7 @@ mod test {
                 let expected = Path::new("resources/tests/config/not-found.yml");
                 match Config::load(expected) {
                     Ok(_) => panic!("should fail"),
-                    Err(LoadingError::FileOpeningFailed(filepath, _)) => {
-                        assert_eq!(filepath, expected)
-                    }
+                    Err(LoadingError::FileOpeningFailed(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
@@ -168,10 +160,9 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let filepath = Path::new("not-found.yml");
                     let err = io::Error::from(io::ErrorKind::PermissionDenied);
-                    let expected = format!("Unable to open {}: {}", filepath.display(), err);
-                    let err = LoadingError::FileOpeningFailed(filepath, err);
+                    let expected = err.to_string();
+                    let err = LoadingError::FileOpeningFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -182,7 +173,7 @@ mod test {
                 #[test]
                 fn should_return_string() {
                     let err = serde_yaml::from_str::<serde_yaml::Value>("{").unwrap_err();
-                    let expected = format!("Invalid YAML syntax: {}", err);
+                    let expected = format!("invalid YAML syntax: {}", err);
                     let err = LoadingError::InvalidYaml(err);
                     assert_eq!(err.to_string(), expected);
                 }
@@ -193,17 +184,8 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let cfg =
-                        serde_yaml::from_str::<serde_json::Value>("tools: terraform\nfoo: bar")
-                            .unwrap();
-                    let schema = include_str!("../resources/main/config.schema.json");
-                    let schema = serde_json::from_str(schema).unwrap();
-                    let schema = JSONSchema::compile(&schema).unwrap();
-                    let err_iter = schema.validate(&cfg).unwrap_err();
-                    let errs: Vec<String> = err_iter.map(|err| err.to_string()).collect();
-                    let err = LoadingError::InvalidConfig(errs.clone());
-                    let expected = format!("Invalid configuration file:\n{}", errs.join("\n"));
-                    assert_eq!(err.to_string(), expected);
+                    let err = LoadingError::InvalidConfig(vec![]);
+                    assert_eq!(err.to_string(), "invalid configuration file");
                 }
             }
 
@@ -212,7 +194,7 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let expected = "Unable to find user home directory";
+                    let expected = "unable to get user home directory";
                     assert_eq!(LoadingError::HomeDirNotFound.to_string(), expected);
                 }
             }
