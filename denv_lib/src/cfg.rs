@@ -2,7 +2,7 @@
 use crate::util::fs::StubFs;
 use crate::util::{
     downloader::*,
-    fs::{DefaultFs, Fs},
+    fs::{DefaultFileSystem, FileSystem},
     zip::*,
 };
 use home::home_dir;
@@ -41,7 +41,7 @@ impl Display for LoadingError<'_> {
 
 pub struct Config {
     tools: Vec<ToolConfig>,
-    pub(crate) fs: Box<dyn Fs>,
+    pub(crate) fs: Box<dyn FileSystem>,
     pub(crate) downloader: Box<dyn Downloader>,
     pub(crate) unzipper: Box<dyn Unzipper>,
 }
@@ -77,7 +77,7 @@ impl Config {
         };
         let cfg = Self {
             tools,
-            fs: Box::new(DefaultFs::new(fs_root_dirpath, temp_dir())),
+            fs: Box::new(DefaultFileSystem::new(fs_root_dirpath, temp_dir())),
             downloader: Box::new(DefaultDownloader),
             unzipper: Box::new(DefaultUnzipper),
         };
