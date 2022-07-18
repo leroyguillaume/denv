@@ -1,9 +1,28 @@
 use super::*;
 use log::info;
-use std::{
-    env::consts::{ARCH, OS},
-    io::BufWriter,
-};
+use std::io::BufWriter;
+
+macro_rules! arch {
+    () => {
+        match std::env::consts::ARCH {
+            "x86" => Ok("386"),
+            "x86_64" => Ok("amd64"),
+            "arm" => Ok("arm"),
+            "aarch64" => Ok("arm64"),
+            _ => Err(InstallError::UnsupportedArch(supported_systems!())),
+        }
+    };
+}
+
+macro_rules! os {
+    () => {
+        match std::env::consts::OS {
+            "macos" => Ok("darwin"),
+            "linux" => Ok("linux"),
+            _ => Err(InstallError::UnsupportedOs(supported_systems!())),
+        }
+    };
+}
 
 macro_rules! supported_systems {
     () => {
@@ -19,31 +38,11 @@ const TOOL_NAME: &str = "terraform";
 #[derive(Debug, Eq, PartialEq)]
 pub struct Terraform(pub String);
 
-impl Terraform {
-    fn arch(&self) -> Result<&'static str, InstallError> {
-        match ARCH {
-            "x86" => Ok("386"),
-            "x86_64" => Ok("amd64"),
-            "arm" => Ok("arm"),
-            "aarch64" => Ok("arm64"),
-            _ => Err(InstallError::UnsupportedArch(supported_systems!())),
-        }
-    }
-
-    fn os(&self) -> Result<&'static str, InstallError> {
-        match OS {
-            "macos" => Ok("darwin"),
-            "linux" => Ok("linux"),
-            _ => Err(InstallError::UnsupportedOs(supported_systems!())),
-        }
-    }
-}
-
 impl Tool for Terraform {
     fn install(&self, cfg: &Config) -> Result<(), InstallError> {
         info!("Installing {} v{}", TOOL_NAME, self.0);
-        let os = self.os()?;
-        let arch = self.arch()?;
+        let os = os!()?;
+        let arch = arch!()?;
         let filename = format!("terraform_{}_{}_{}.zip", self.0, os, arch);
         let url = format!(
             "https://releases.hashicorp.com/terraform/{}/{}",
@@ -88,46 +87,6 @@ mod test {
     mod terraform {
         use super::*;
 
-        mod arch {
-            use super::*;
-
-            macro_rules! should_return_arch {
-                ($arch:expr, $expected:expr) => {
-                    #[test]
-                    #[cfg(target_arch = $arch)]
-                    fn should_return_arch() {
-                        let tf = Terraform("1.2.3".into());
-                        let arch = tf.arch().unwrap();
-                        assert_eq!(arch, $expected);
-                    }
-                };
-            }
-
-            should_return_arch!("x86", "386");
-            should_return_arch!("x86_64", "amd64");
-            should_return_arch!("arm", "arm");
-            should_return_arch!("aarch64", "arm64");
-        }
-
-        mod os {
-            use super::*;
-
-            macro_rules! should_return_os {
-                ($os:expr, $expected:expr) => {
-                    #[test]
-                    #[cfg(target_os = $os)]
-                    fn should_return_os() {
-                        let tf = Terraform("1.2.3".into());
-                        let os = tf.os().unwrap();
-                        assert_eq!(os, $expected);
-                    }
-                };
-            }
-
-            should_return_os!("macos", "darwin");
-            should_return_os!("linux", "linux");
-        }
-
         mod install {
             use super::*;
 
@@ -138,8 +97,8 @@ mod test {
                     fn should_return_file_system_writing_failed_failed_err_if_tmp_file_creation_failed() {
                         let expected_version = "1.2.3";
                         let tf = Terraform(expected_version.into());
-                        let os = tf.os().unwrap();
-                        let arch = tf.arch().unwrap();
+                        let os = os!().unwrap();
+                        let arch = arch!().unwrap();
                         let fs = StubFs::new()
                             .with_create_tmp_file_fn({
                                 move |filename| {
@@ -163,8 +122,8 @@ mod test {
                     fn should_return_download_failed_err() {
                         let expected_version = "1.2.3";
                         let tf = Terraform(expected_version.into());
-                        let os = tf.os().unwrap();
-                        let arch = tf.arch().unwrap();
+                        let os = os!().unwrap();
+                        let arch = arch!().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
                         let fs = StubFs::new()
                             .with_create_tmp_file_fn({
@@ -202,8 +161,8 @@ mod test {
                     fn should_return_file_system_writing_failed_err_if_bin_file_creation_failed() {
                         let expected_version = "1.2.3";
                         let tf = Terraform(expected_version.into());
-                        let os = tf.os().unwrap();
-                        let arch = tf.arch().unwrap();
+                        let os = os!().unwrap();
+                        let arch = arch!().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
                         let fs = StubFs::new()
                             .with_create_tmp_file_fn({
@@ -245,8 +204,8 @@ mod test {
                     fn should_return_unzip_failed_err() {
                         let expected_version = "1.2.3";
                         let tf = Terraform(expected_version.into());
-                        let os = tf.os().unwrap();
-                        let arch = tf.arch().unwrap();
+                        let os = os!().unwrap();
+                        let arch = arch!().unwrap();
                         let expected_zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
                         let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
                         let fs = StubFs::new()
@@ -304,8 +263,8 @@ mod test {
                     fn should_install_terraform() {
                         let expected_version = "1.2.3";
                         let tf = Terraform(expected_version.into());
-                        let os = tf.os().unwrap();
-                        let arch = tf.arch().unwrap();
+                        let os = os!().unwrap();
+                        let arch = arch!().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
                         let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
                         let fs = StubFs::new()
