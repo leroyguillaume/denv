@@ -9,9 +9,11 @@ use crate::{
         zip::*,
     },
 };
+use hex::encode;
 use home::home_dir;
 use jsonschema::JSONSchema;
 use log::debug;
+use sha2::{Digest, Sha256};
 use std::{
     env::temp_dir,
     fmt::{self, Display, Formatter},
@@ -80,6 +82,16 @@ impl Config {
             unzipper: Box::new(DefaultUnzipper),
         };
         Ok(cfg)
+    }
+
+    pub fn sha256(&self) -> String {
+        let mut hasher = Sha256::new();
+        for tool in &self.tools {
+            hasher.update(tool.name());
+            hasher.update(tool.version());
+        }
+        let sha256 = hasher.finalize();
+        encode(sha256)
     }
 
     pub fn tools(&self) -> &[Box<dyn Tool>] {
@@ -196,6 +208,40 @@ mod test {
                 let expected: Vec<Box<dyn Tool>> = vec![Box::new(Terraform("1.2.3".into()))];
                 let cfg = Config::load(Path::new("resources/tests/config/denv.yml")).unwrap();
                 assert_eq!(cfg.tools(), expected);
+            }
+        }
+
+        mod sha256 {
+            use super::*;
+
+            #[test]
+            fn should_return_sha256_hex_string() {
+                let mut cfg =
+                    Config::stub(StubFs::new(), StubDownloader::new(), StubUnzipper::new());
+                let tool1 = DummyTool("1.2.3");
+                let tool2 = DummyTool("1.2.4");
+                let mut hasher = Sha256::new();
+                hasher.update(tool1.name());
+                hasher.update(tool1.version());
+                hasher.update(tool2.name());
+                hasher.update(tool2.version());
+                let expected = encode(hasher.finalize());
+                cfg.tools = vec![Box::new(tool1), Box::new(tool2)];
+                assert_eq!(cfg.sha256(), expected);
+            }
+        }
+
+        mod tools {
+            use super::*;
+
+            #[test]
+            fn should_return_tools() {
+                let mut cfg =
+                    Config::stub(StubFs::new(), StubDownloader::new(), StubUnzipper::new());
+                let tool1 = DummyTool("1.2.3");
+                let tool2 = DummyTool("1.2.4");
+                cfg.tools = vec![Box::new(tool1), Box::new(tool2)];
+                assert_eq!(cfg.tools(), cfg.tools);
             }
         }
     }

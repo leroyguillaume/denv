@@ -83,28 +83,30 @@ impl PartialEq for dyn Tool {
 }
 
 #[cfg(test)]
+#[derive(Debug)]
+pub struct DummyTool(pub &'static str);
+
+#[cfg(test)]
+impl Tool for DummyTool {
+    fn install(&self, _cfg: &Config) -> Result<(), InstallError> {
+        Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        "dummy"
+    }
+
+    fn version(&self) -> &str {
+        self.0
+    }
+}
+
+#[cfg(test)]
 mod test {
     use super::*;
     use maplit::{hashmap, hashset};
     use reqwest::blocking::get;
     use std::{io, path::PathBuf};
-
-    #[derive(Debug)]
-    struct DummyTool(&'static str);
-
-    impl Tool for DummyTool {
-        fn install(&self, _cfg: &Config) -> Result<(), InstallError> {
-            Ok(())
-        }
-
-        fn name(&self) -> &'static str {
-            "dummy"
-        }
-
-        fn version(&self) -> &str {
-            self.0
-        }
-    }
 
     mod install_error {
         use super::*;
