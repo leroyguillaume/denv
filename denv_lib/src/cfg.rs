@@ -103,51 +103,6 @@ impl Config {
 mod test {
     use super::*;
 
-    mod config {
-        use super::*;
-
-        mod load {
-            use super::*;
-
-            #[test]
-            fn should_return_file_opening_failed() {
-                let expected = Path::new("resources/tests/config/not-found.yml");
-                match Config::load(expected) {
-                    Ok(_) => panic!("should fail"),
-                    Err(LoadingError::FileOpeningFailed(_)) => {}
-                    Err(err) => panic!("{}", err),
-                }
-            }
-
-            #[test]
-            fn should_return_invalid_yaml_err() {
-                let expected = Path::new("resources/tests/config/invalid-yaml.yml");
-                match Config::load(expected) {
-                    Ok(_) => panic!("should fail"),
-                    Err(LoadingError::InvalidYaml(_)) => {}
-                    Err(err) => panic!("{}", err),
-                }
-            }
-
-            #[test]
-            fn should_return_invalid_config_err() {
-                let expected = Path::new("resources/tests/config/invalid-config.yml");
-                match Config::load(expected) {
-                    Ok(_) => panic!("should fail"),
-                    Err(LoadingError::InvalidConfig(_)) => {}
-                    Err(err) => panic!("{}", err),
-                }
-            }
-
-            #[test]
-            fn should_return_config() {
-                let expected: Vec<Box<dyn Tool>> = vec![Box::new(Terraform("1.2.3".into()))];
-                let cfg = Config::load(Path::new("resources/tests/config/denv.yml")).unwrap();
-                assert_eq!(cfg.tools(), expected);
-            }
-        }
-    }
-
     mod loading_error {
         use super::*;
 
@@ -196,6 +151,51 @@ mod test {
                     let expected = "Unable to get user home directory";
                     assert_eq!(LoadingError::HomeDirNotFound.to_string(), expected);
                 }
+            }
+        }
+    }
+
+    mod config {
+        use super::*;
+
+        mod load {
+            use super::*;
+
+            #[test]
+            fn should_return_file_opening_failed() {
+                let expected = Path::new("resources/tests/config/not-found.yml");
+                match Config::load(expected) {
+                    Ok(_) => panic!("should fail"),
+                    Err(LoadingError::FileOpeningFailed(_)) => {}
+                    Err(err) => panic!("{}", err),
+                }
+            }
+
+            #[test]
+            fn should_return_invalid_yaml_err() {
+                let expected = Path::new("resources/tests/config/invalid-yaml.yml");
+                match Config::load(expected) {
+                    Ok(_) => panic!("should fail"),
+                    Err(LoadingError::InvalidYaml(_)) => {}
+                    Err(err) => panic!("{}", err),
+                }
+            }
+
+            #[test]
+            fn should_return_invalid_config_err() {
+                let expected = Path::new("resources/tests/config/invalid-config.yml");
+                match Config::load(expected) {
+                    Ok(_) => panic!("should fail"),
+                    Err(LoadingError::InvalidConfig(_)) => {}
+                    Err(err) => panic!("{}", err),
+                }
+            }
+
+            #[test]
+            fn should_return_config() {
+                let expected: Vec<Box<dyn Tool>> = vec![Box::new(Terraform("1.2.3".into()))];
+                let cfg = Config::load(Path::new("resources/tests/config/denv.yml")).unwrap();
+                assert_eq!(cfg.tools(), expected);
             }
         }
     }
