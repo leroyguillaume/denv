@@ -1,30 +1,11 @@
+use crate::error::*;
 use log::debug;
 use std::{
-    fmt::{self, Display, Formatter},
     fs::File,
-    io::{self, copy, BufReader, Write},
+    io::{copy, BufReader, Write},
     path::Path,
 };
-use zip::{result::ZipError, ZipArchive};
-
-#[derive(Debug)]
-pub enum UnzipError {
-    FileOpeningFailed(io::Error),
-    InvalidZipFile(ZipError),
-    UnzipFailed(ZipError),
-    DestinationWritingFailed(io::Error),
-}
-
-impl Display for UnzipError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::FileOpeningFailed(err) => write!(f, "{}", err),
-            Self::InvalidZipFile(err) => write!(f, "{}", err),
-            Self::UnzipFailed(err) => write!(f, "{}", err),
-            Self::DestinationWritingFailed(err) => write!(f, "{}", err),
-        }
-    }
-}
+use zip::ZipArchive;
 
 pub trait Unzipper {
     fn unzip(
@@ -100,65 +81,7 @@ mod test {
         env::temp_dir,
         fs::{create_dir_all, File},
     };
-    use tempfile::{tempdir, tempfile};
-
-    mod unzip_error {
-        use super::*;
-
-        mod to_string {
-            use super::*;
-
-            mod file_opening_failed {
-                use super::*;
-
-                #[test]
-                fn should_return_string() {
-                    let err = io::Error::from(io::ErrorKind::PermissionDenied);
-                    let expected = err.to_string();
-                    let err = UnzipError::FileOpeningFailed(err);
-                    assert_eq!(err.to_string(), expected);
-                }
-            }
-
-            mod invalid_zip_file {
-                use super::*;
-
-                #[test]
-                fn should_return_string() {
-                    let file = tempfile().unwrap();
-                    let err = ZipArchive::new(file).unwrap_err();
-                    let expected = err.to_string();
-                    let err = UnzipError::InvalidZipFile(err);
-                    assert_eq!(err.to_string(), expected);
-                }
-            }
-
-            mod unzip_failed {
-                use super::*;
-
-                #[test]
-                fn should_return_string() {
-                    let file = tempfile().unwrap();
-                    let err = ZipArchive::new(file).unwrap_err();
-                    let expected = err.to_string();
-                    let err = UnzipError::UnzipFailed(err);
-                    assert_eq!(err.to_string(), expected);
-                }
-            }
-
-            mod destination_writing_failed {
-                use super::*;
-
-                #[test]
-                fn should_return_string() {
-                    let err = io::Error::from(io::ErrorKind::PermissionDenied);
-                    let expected = err.to_string();
-                    let err = UnzipError::DestinationWritingFailed(err);
-                    assert_eq!(err.to_string(), expected);
-                }
-            }
-        }
-    }
+    use tempfile::tempdir;
 
     mod unzipper {
         use super::*;

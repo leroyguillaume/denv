@@ -1,8 +1,7 @@
+use crate::error::*;
 use log::{debug, trace};
 use std::{
-    fmt::{self, Display, Formatter},
     fs::{create_dir_all, File, OpenOptions},
-    io,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
@@ -14,7 +13,7 @@ macro_rules! ensure_dir {
             Ok(())
         } else {
             debug!("Creating directory {}", $path.display());
-            create_dir_all($path).map_err(|err| Error::new($path.clone(), err))
+            create_dir_all($path).map_err(|err| FileSystemError::new($path.clone(), err))
         }
     };
 }
@@ -27,7 +26,7 @@ macro_rules! open_file {
             .write(true)
             .open(&$path)
             .map(|file| ($path, file))
-            .map_err(|err| Error::new($path, err))
+            .map_err(|err| FileSystemError::new($path, err))
     }};
 }
 
@@ -40,33 +39,7 @@ macro_rules! tool_dirpath {
 const TOOLS_DIRNAME: &str = "tools";
 const CFGS_DIRNAME: &str = "configurations";
 
-pub type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Debug)]
-pub struct Error {
-    path: PathBuf,
-    source: io::Error,
-}
-
-impl Error {
-    pub fn new(path: PathBuf, source: io::Error) -> Self {
-        Self { path, source }
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn source(&self) -> &io::Error {
-        &self.source
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "I/O failed on {}: {}", self.path.display(), self.source)
-    }
-}
+pub type Result<T> = std::result::Result<T, FileSystemError>;
 
 pub trait FileSystem {
     fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)>;
@@ -113,7 +86,7 @@ impl FileSystem for DefaultFileSystem {
             src_filepath.display(),
             dest_dirpath.display()
         );
-        symlink(src_filepath, dest_filepath).map_err(|err| Error::new(dest_dirpath, err))
+        symlink(src_filepath, dest_filepath).map_err(|err| FileSystemError::new(dest_dirpath, err))
     }
 
     fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)> {
@@ -240,37 +213,6 @@ mod test {
         io::Write,
     };
     use tempfile::tempdir;
-
-    mod error {
-        use super::*;
-
-        mod new {
-            use super::*;
-
-            #[test]
-            fn should_return_error() {
-                let path = PathBuf::from("/error");
-                let source_kind = io::ErrorKind::PermissionDenied;
-                let source = io::Error::from(source_kind);
-                let err = Error::new(path.clone(), source);
-                assert_eq!(err.path(), path);
-                assert_eq!(err.source().kind(), source_kind);
-            }
-        }
-
-        mod to_string {
-            use super::*;
-
-            #[test]
-            fn should_return_string() {
-                let path = PathBuf::from("/error");
-                let source = io::Error::from(io::ErrorKind::PermissionDenied);
-                let expected = format!("I/O failed on {}: {}", path.display(), source);
-                let err = Error::new(path, source);
-                assert_eq!(err.to_string(), expected);
-            }
-        }
-    }
 
     mod default_file_system {
         use super::*;

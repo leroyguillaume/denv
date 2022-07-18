@@ -1,6 +1,6 @@
 pub mod terraform;
 
-use crate::{cfg::Config, util::downloader::*, util::fs, util::zip::*};
+use crate::{cfg::Config, error::*};
 use std::{
     collections::{HashMap, HashSet},
     env::consts::{ARCH, OS},
@@ -14,7 +14,7 @@ pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
 pub enum InstallError {
     UnsupportedOs(SupportedSystems),
     UnsupportedArch(SupportedSystems),
-    FileSystemWritingFailed(fs::Error),
+    FileSystemWritingFailed(FileSystemError),
     DownloadFailed(DownloadError),
     UnzipFailed(PathBuf, String, UnzipError),
 }
@@ -114,7 +114,7 @@ impl Tool for DummyTool {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::util::fs::*;
+    use crate::util::{downloader::*, fs::*, zip::*};
     use maplit::{hashmap, hashset};
     use reqwest::blocking::get;
     use std::{io, path::PathBuf};
@@ -160,7 +160,7 @@ mod test {
 
                 #[test]
                 fn should_return_string() {
-                    let err = fs::Error::new(
+                    let err = FileSystemError::new(
                         PathBuf::from("/error"),
                         io::Error::from(io::ErrorKind::PermissionDenied),
                     );

@@ -104,7 +104,7 @@ mod test {
                                 move |filename| {
                                     let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
                                     assert_eq!(filename, expected);
-                                    Err(fs::Error::new(PathBuf::from("/error"), io::Error::from(io::ErrorKind::PermissionDenied)))
+                                    Err(FileSystemError::new(PathBuf::from("/error"), io::Error::from(io::ErrorKind::PermissionDenied)))
                                 }
                             });
                         let downloader = StubDownloader::new();
@@ -133,7 +133,7 @@ mod test {
                                     assert_eq!(filename, expected);
                                     Ok((
                                         zip_filepath.clone(),
-                                        File::create(&zip_filepath).map_err(|err| fs::Error::new(zip_filepath.clone(), err))?
+                                        File::create(&zip_filepath).map_err(|err| FileSystemError::new(zip_filepath.clone(), err))?
                                     ))
                                 }
                             });
@@ -172,14 +172,14 @@ mod test {
                                     assert_eq!(filename, expected);
                                     Ok((
                                         zip_filepath.clone(),
-                                        File::create(&zip_filepath).map_err(|err| fs::Error::new(zip_filepath.clone(), err))?
+                                        File::create(&zip_filepath).map_err(|err| FileSystemError::new(zip_filepath.clone(), err))?
                                     ))
                                 }
                             })
                             .with_create_bin_file_fn(move |name, version| {
                                 assert_eq!(name, TOOL_NAME);
                                 assert_eq!(version, expected_version);
-                                Err(fs::Error::new(PathBuf::from("/error"), io::Error::from(io::ErrorKind::PermissionDenied)))
+                                Err(FileSystemError::new(PathBuf::from("/error"), io::Error::from(io::ErrorKind::PermissionDenied)))
                             });
                         let downloader = StubDownloader::new()
                             .with_download_fn(move |url, _| {
@@ -216,7 +216,7 @@ mod test {
                                     assert_eq!(filename, expected);
                                     Ok((
                                         expected_zip_filepath.clone(),
-                                        File::create(&expected_zip_filepath).map_err(|err| fs::Error::new(expected_zip_filepath.clone(), err))?
+                                        File::create(&expected_zip_filepath).map_err(|err| FileSystemError::new(expected_zip_filepath.clone(), err))?
                                     ))
                                 }
                             })
@@ -225,7 +225,7 @@ mod test {
                                 assert_eq!(version, expected_version);
                                 Ok((
                                     bin_filepath.clone(),
-                                    File::create(&bin_filepath).map_err(|err| fs::Error::new(bin_filepath.clone(), err))?
+                                    File::create(&bin_filepath).map_err(|err| FileSystemError::new(bin_filepath.clone(), err))?
                                 ))
                             });
                         let downloader = StubDownloader::new()
@@ -275,7 +275,7 @@ mod test {
                                     assert_eq!(filename, expected);
                                     Ok((
                                         zip_filepath.clone(),
-                                        File::create(&zip_filepath).map_err(|err| fs::Error::new(zip_filepath.clone(), err))?
+                                        File::create(&zip_filepath).map_err(|err| FileSystemError::new(zip_filepath.clone(), err))?
                                     ))
                                 }
                             })
@@ -284,7 +284,7 @@ mod test {
                                 assert_eq!(version, expected_version);
                                 Ok((
                                     bin_filepath.clone(),
-                                    File::create(&bin_filepath).map_err(|err| fs::Error::new(bin_filepath.clone(), err))?
+                                    File::create(&bin_filepath).map_err(|err| FileSystemError::new(bin_filepath.clone(), err))?
                                 ))
                             });
                         let downloader = StubDownloader::new()
