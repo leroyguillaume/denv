@@ -31,6 +31,9 @@ macro_rules! open_file {
     }};
 }
 
+const TOOLS_DIRNAME: &str = "tools";
+const CFGS_DIRNAME: &str = "configurations";
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
@@ -62,7 +65,7 @@ impl Display for Error {
 pub trait FileSystem {
     fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)>;
 
-    fn create_bin_symlink(&self, name: &str, version: &str) -> Result<()>;
+    fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()>;
 
     fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)>;
 
@@ -85,7 +88,10 @@ impl DefaultFileSystem {
     }
 
     fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf {
-        self.root_dirpath.join("tools").join(name).join(version)
+        self.root_dirpath
+            .join(TOOLS_DIRNAME)
+            .join(name)
+            .join(version)
     }
 }
 
@@ -96,9 +102,9 @@ impl FileSystem for DefaultFileSystem {
         open_file!(dirpath.join(name))
     }
 
-    fn create_bin_symlink(&self, name: &str, version: &str) -> Result<()> {
+    fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()> {
         let src_filepath = self.tool_dirpath(name, version).join(name);
-        let dest_dirpath = self.root_dirpath.join("bin");
+        let dest_dirpath = self.root_dirpath.join(CFGS_DIRNAME).join(cfg_sha256);
         ensure_dir!(&dest_dirpath)?;
         let dest_filepath = dest_dirpath.join(name);
         debug!(
@@ -126,7 +132,7 @@ impl FileSystem for DefaultFileSystem {
 type CreateBinFileFn = dyn Fn(&str, &str) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
-type CreateBinSymlinkFn = dyn Fn(&str, &str) -> Result<()>;
+type CreateBinSymlinkFn = dyn Fn(&str, &str, &str) -> Result<()>;
 
 #[cfg(test)]
 type CreateTmpFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
@@ -153,7 +159,7 @@ impl StubFs {
         self
     }
 
-    pub fn with_create_bin_symlink_fn<F: Fn(&str, &str) -> Result<()> + 'static>(
+    pub fn with_create_bin_symlink_fn<F: Fn(&str, &str, &str) -> Result<()> + 'static>(
         mut self,
         create_bin_symlink_fn: F,
     ) -> Self {
@@ -179,9 +185,9 @@ impl FileSystem for StubFs {
         }
     }
 
-    fn create_bin_symlink(&self, name: &str, version: &str) -> Result<()> {
+    fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()> {
         match &self.create_bin_symlink_fn {
-            Some(create_bin_symlink_fn) => create_bin_symlink_fn(name, version),
+            Some(create_bin_symlink_fn) => create_bin_symlink_fn(name, version, cfg_sha256),
             None => unimplemented!(),
         }
     }
@@ -279,7 +285,7 @@ mod test {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let expected = root_dirpath
-                    .join("tools")
+                    .join(TOOLS_DIRNAME)
                     .join(name)
                     .join(version)
                     .join(name);
@@ -296,13 +302,14 @@ mod test {
             #[test]
             fn should_return_err() {
                 let name = "terraform";
+                let cfg_sha256 = "sha256";
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let filepath = root_dirpath.join("bin").join(name);
+                let filepath = root_dirpath.join(CFGS_DIRNAME).join(cfg_sha256).join(name);
                 create_dir_all(filepath.parent().unwrap()).unwrap();
                 write(filepath, "").unwrap();
                 let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
-                if fs.create_bin_symlink(name, "1.2.3").is_ok() {
+                if fs.create_bin_symlink(name, "1.2.3", cfg_sha256).is_ok() {
                     panic!("should fail");
                 }
             }
@@ -311,16 +318,17 @@ mod test {
             fn should_create_symlink() {
                 let name = "terraform";
                 let version = "1.2.3";
+                let cfg_sha256 = "sha256";
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let src_filepath = root_dirpath
-                    .join("tools")
+                    .join(TOOLS_DIRNAME)
                     .join(name)
                     .join(version)
                     .join(name);
-                let dest_filepath = root_dirpath.join("bin").join(name);
+                let dest_filepath = root_dirpath.join(CFGS_DIRNAME).join(cfg_sha256).join(name);
                 let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
-                fs.create_bin_symlink(name, version).unwrap();
+                fs.create_bin_symlink(name, version, cfg_sha256).unwrap();
                 assert!(dest_filepath.is_symlink());
                 assert_eq!(read_link(dest_filepath).unwrap(), src_filepath);
             }
