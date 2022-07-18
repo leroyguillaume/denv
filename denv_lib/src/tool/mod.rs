@@ -71,6 +71,10 @@ impl Display for InstallError {
 pub trait Tool: Debug {
     fn install(&self, cfg: &Config) -> Result<(), InstallError>;
 
+    fn is_installed(&self, cfg: &Config) -> bool {
+        cfg.fs.is_installed_tool(self.name(), self.version())
+    }
+
     fn name(&self) -> &'static str;
 
     fn version(&self) -> &str;
@@ -83,7 +87,7 @@ impl PartialEq for dyn Tool {
 }
 
 #[cfg(test)]
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct DummyTool(pub &'static str);
 
 #[cfg(test)]
@@ -104,6 +108,7 @@ impl Tool for DummyTool {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::util::fs::*;
     use maplit::{hashmap, hashset};
     use reqwest::blocking::get;
     use std::{io, path::PathBuf};
@@ -214,6 +219,29 @@ mod test {
                 let tool2: Box<dyn Tool> = Box::new(DummyTool("1.2.3"));
                 assert!(tool1 == tool2);
             }
+        }
+
+        mod is_installed {
+            use super::*;
+
+            macro_rules! test {
+                ($ident:ident, $expected:expr) => {
+                    #[test]
+                    fn $ident() {
+                        let tool = DummyTool("1.2.3");
+                        let fs = StubFs::new().with_is_installed_tool_fn(move |name, version| {
+                            assert_eq!(name, tool.name());
+                            assert_eq!(version, tool.version());
+                            $expected
+                        });
+                        let cfg = Config::stub(fs, StubDownloader::new(), StubUnzipper::new());
+                        assert_eq!(tool.is_installed(&cfg), $expected);
+                    }
+                };
+            }
+
+            test!(should_return_false, false);
+            test!(should_return_true, true);
         }
     }
 }
