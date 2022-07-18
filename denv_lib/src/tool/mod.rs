@@ -80,6 +80,12 @@ pub trait Tool: Debug {
     fn version(&self) -> &str;
 }
 
+impl Display for dyn Tool {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{} v{}", self.name(), self.version())
+    }
+}
+
 impl PartialEq for dyn Tool {
     fn eq(&self, tool: &dyn Tool) -> bool {
         self.name() == tool.name() && self.version() == tool.version()
@@ -244,6 +250,17 @@ mod test {
 
             test!(should_return_false, false);
             test!(should_return_true, true);
+        }
+
+        mod to_string {
+            use super::*;
+
+            #[test]
+            fn should_return_string() {
+                let tool: Box<dyn Tool> = Box::new(DummyTool("1.2.3"));
+                let expected = format!("{} v{}", tool.name(), tool.version());
+                assert_eq!(tool.to_string(), expected);
+            }
         }
     }
 }
