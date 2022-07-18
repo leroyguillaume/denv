@@ -1,5 +1,5 @@
 #[cfg(test)]
-use crate::util::fs::StubFs;
+use crate::util::fs::StubFileSystem;
 use crate::{
     tool::terraform::*,
     tool::*,
@@ -101,7 +101,7 @@ impl Config {
 
 #[cfg(test)]
 impl Config {
-    pub fn stub(fs: StubFs, downloader: StubDownloader, unziper: StubUnzipper) -> Self {
+    pub fn stub(fs: StubFileSystem, downloader: StubDownloader, unziper: StubUnzipper) -> Self {
         Self {
             tools: vec![],
             downloader: Box::new(downloader),
@@ -216,8 +216,11 @@ mod test {
 
             #[test]
             fn should_return_sha256_hex_string() {
-                let mut cfg =
-                    Config::stub(StubFs::new(), StubDownloader::new(), StubUnzipper::new());
+                let mut cfg = Config::stub(
+                    StubFileSystem::new(),
+                    StubDownloader::new(),
+                    StubUnzipper::new(),
+                );
                 let tool1 = DummyTool("1.2.3");
                 let tool2 = DummyTool("1.2.4");
                 let mut hasher = Sha256::new();
@@ -236,8 +239,11 @@ mod test {
 
             #[test]
             fn should_return_tools() {
-                let mut cfg =
-                    Config::stub(StubFs::new(), StubDownloader::new(), StubUnzipper::new());
+                let mut cfg = Config::stub(
+                    StubFileSystem::new(),
+                    StubDownloader::new(),
+                    StubUnzipper::new(),
+                );
                 let tool1 = DummyTool("1.2.3");
                 let tool2 = DummyTool("1.2.4");
                 cfg.tools = vec![Box::new(tool1), Box::new(tool2)];

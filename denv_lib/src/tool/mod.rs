@@ -229,11 +229,13 @@ mod test {
                     #[test]
                     fn $ident() {
                         let tool = DummyTool("1.2.3");
-                        let fs = StubFs::new().with_is_installed_tool_fn(move |name, version| {
-                            assert_eq!(name, tool.name());
-                            assert_eq!(version, tool.version());
-                            $expected
-                        });
+                        let fs = StubFileSystem::new().with_is_installed_tool_fn(
+                            move |name, version| {
+                                assert_eq!(name, tool.name());
+                                assert_eq!(version, tool.version());
+                                $expected
+                            },
+                        );
                         let cfg = Config::stub(fs, StubDownloader::new(), StubUnzipper::new());
                         assert_eq!(tool.is_installed(&cfg), $expected);
                     }

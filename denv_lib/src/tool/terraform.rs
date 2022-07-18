@@ -99,7 +99,7 @@ mod test {
                         let tf = Terraform(expected_version.into());
                         let os = os!().unwrap();
                         let arch = arch!().unwrap();
-                        let fs = StubFs::new()
+                        let fs = StubFileSystem::new()
                             .with_create_tmp_file_fn({
                                 move |filename| {
                                     let expected = format!("terraform_{}_{}_{}.zip", expected_version, os, arch);
@@ -125,7 +125,7 @@ mod test {
                         let os = os!().unwrap();
                         let arch = arch!().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
-                        let fs = StubFs::new()
+                        let fs = StubFileSystem::new()
                             .with_create_tmp_file_fn({
                                 let zip_filepath = zip_filepath.clone();
                                 move |filename| {
@@ -164,7 +164,7 @@ mod test {
                         let os = os!().unwrap();
                         let arch = arch!().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
-                        let fs = StubFs::new()
+                        let fs = StubFileSystem::new()
                             .with_create_tmp_file_fn({
                                 let zip_filepath = zip_filepath.clone();
                                 move |filename| {
@@ -208,7 +208,7 @@ mod test {
                         let arch = arch!().unwrap();
                         let expected_zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
                         let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
-                        let fs = StubFs::new()
+                        let fs = StubFileSystem::new()
                             .with_create_tmp_file_fn({
                                 let expected_zip_filepath = expected_zip_filepath.clone();
                                 move |filename| {
@@ -267,7 +267,7 @@ mod test {
                         let arch = arch!().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
                         let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
-                        let fs = StubFs::new()
+                        let fs = StubFileSystem::new()
                             .with_create_tmp_file_fn({
                                 let zip_filepath = zip_filepath.clone();
                                 move |filename| {

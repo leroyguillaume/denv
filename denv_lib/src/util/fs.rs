@@ -147,7 +147,7 @@ type IsInstalledToolFn = dyn Fn(&str, &str) -> bool;
 
 #[cfg(test)]
 #[derive(Default)]
-pub struct StubFs {
+pub struct StubFileSystem {
     create_bin_file_fn: Option<Box<CreateBinFileFn>>,
     create_bin_symlink_fn: Option<Box<CreateBinSymlinkFn>>,
     create_tmp_file_fn: Option<Box<CreateTmpFileFn>>,
@@ -155,7 +155,7 @@ pub struct StubFs {
 }
 
 #[cfg(test)]
-impl StubFs {
+impl StubFileSystem {
     pub fn new() -> Self {
         Self::default()
     }
@@ -194,7 +194,7 @@ impl StubFs {
 }
 
 #[cfg(test)]
-impl FileSystem for StubFs {
+impl FileSystem for StubFileSystem {
     fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)> {
         match &self.create_bin_file_fn {
             Some(create_bin_file_fn) => create_bin_file_fn(name, version),
