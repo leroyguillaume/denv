@@ -31,6 +31,12 @@ macro_rules! open_file {
     }};
 }
 
+macro_rules! tool_dirpath {
+    ($root_dirpath:expr, $name:expr, $version:expr) => {
+        $root_dirpath.join(TOOLS_DIRNAME).join($name).join($version)
+    };
+}
+
 const TOOLS_DIRNAME: &str = "tools";
 const CFGS_DIRNAME: &str = "configurations";
 
@@ -69,6 +75,8 @@ pub trait FileSystem {
 
     fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)>;
 
+    fn is_installed_tool(&self, name: &str, version: &str) -> bool;
+
     fn root_dirpath(&self) -> &Path;
 
     fn tmp_dirpath(&self) -> &Path;
@@ -86,24 +94,17 @@ impl DefaultFileSystem {
             tmp_dirpath,
         }
     }
-
-    fn tool_dirpath(&self, name: &str, version: &str) -> PathBuf {
-        self.root_dirpath
-            .join(TOOLS_DIRNAME)
-            .join(name)
-            .join(version)
-    }
 }
 
 impl FileSystem for DefaultFileSystem {
     fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)> {
-        let dirpath = self.tool_dirpath(name, version);
+        let dirpath = tool_dirpath!(self.root_dirpath, name, version);
         ensure_dir!(&dirpath)?;
         open_file!(dirpath.join(name))
     }
 
     fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()> {
-        let src_filepath = self.tool_dirpath(name, version).join(name);
+        let src_filepath = tool_dirpath!(self.root_dirpath, name, version).join(name);
         let dest_dirpath = self.root_dirpath.join(CFGS_DIRNAME).join(cfg_sha256);
         ensure_dir!(&dest_dirpath)?;
         let dest_filepath = dest_dirpath.join(name);
@@ -117,6 +118,10 @@ impl FileSystem for DefaultFileSystem {
 
     fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)> {
         open_file!(self.tmp_dirpath.join(filename))
+    }
+
+    fn is_installed_tool(&self, name: &str, version: &str) -> bool {
+        tool_dirpath!(self.root_dirpath, name, version).is_dir()
     }
 
     fn root_dirpath(&self) -> &Path {
@@ -138,11 +143,15 @@ type CreateBinSymlinkFn = dyn Fn(&str, &str, &str) -> Result<()>;
 type CreateTmpFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
+type IsInstalledToolFn = dyn Fn(&str, &str) -> bool;
+
+#[cfg(test)]
 #[derive(Default)]
 pub struct StubFs {
     create_bin_file_fn: Option<Box<CreateBinFileFn>>,
     create_bin_symlink_fn: Option<Box<CreateBinSymlinkFn>>,
     create_tmp_file_fn: Option<Box<CreateTmpFileFn>>,
+    is_installed_tool_fn: Option<Box<IsInstalledToolFn>>,
 }
 
 #[cfg(test)]
@@ -174,6 +183,14 @@ impl StubFs {
         self.create_tmp_file_fn = Some(Box::new(create_tmp_file_fn));
         self
     }
+
+    pub fn with_is_installed_tool_fn<F: Fn(&str, &str) -> bool + 'static>(
+        mut self,
+        is_installed_tool_fn: F,
+    ) -> Self {
+        self.is_installed_tool_fn = Some(Box::new(is_installed_tool_fn));
+        self
+    }
 }
 
 #[cfg(test)]
@@ -195,6 +212,13 @@ impl FileSystem for StubFs {
     fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)> {
         match &self.create_tmp_file_fn {
             Some(create_tmp_file_fn) => create_tmp_file_fn(filename),
+            None => unimplemented!(),
+        }
+    }
+
+    fn is_installed_tool(&self, name: &str, version: &str) -> bool {
+        match &self.is_installed_tool_fn {
+            Some(is_installed_tool_fn) => is_installed_tool_fn(name, version),
             None => unimplemented!(),
         }
     }
@@ -358,6 +382,31 @@ mod test {
                 let (filepath, mut file) = fs.create_tmp_file(filename).unwrap();
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
+            }
+        }
+
+        mod is_installed_tool {
+            use super::*;
+
+            #[test]
+            fn should_return_false() {
+                let root_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
+                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                let is_installed = fs.is_installed_tool("terraform", "1.2.3");
+                assert!(!is_installed);
+            }
+
+            #[test]
+            fn should_return_true() {
+                let name = "terraform";
+                let version = "1.2.3";
+                let root_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
+                create_dir_all(root_dirpath.join(TOOLS_DIRNAME).join(name).join(version)).unwrap();
+                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                let is_installed = fs.is_installed_tool(name, version);
+                assert!(is_installed);
             }
         }
     }
