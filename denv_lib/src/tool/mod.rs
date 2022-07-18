@@ -89,6 +89,23 @@ mod test {
     use reqwest::blocking::get;
     use std::{io, path::PathBuf};
 
+    #[derive(Debug)]
+    struct DummyTool(&'static str);
+
+    impl Tool for DummyTool {
+        fn install(&self, _cfg: &Config) -> Result<(), InstallError> {
+            Ok(())
+        }
+
+        fn name(&self) -> &'static str {
+            "dummy"
+        }
+
+        fn version(&self) -> &str {
+            self.0
+        }
+    }
+
     mod install_error {
         use super::*;
 
@@ -172,6 +189,28 @@ mod test {
                     let err = InstallError::UnzipFailed(zip_filepath, filepath.into(), err);
                     assert_eq!(err.to_string(), expected);
                 }
+            }
+        }
+    }
+
+    mod tool {
+        use super::*;
+
+        mod eq {
+            use super::*;
+
+            #[test]
+            fn should_return_false() {
+                let tool1: Box<dyn Tool> = Box::new(DummyTool("1.2.3"));
+                let tool2: Box<dyn Tool> = Box::new(DummyTool("1.2.4"));
+                assert!(tool1 != tool2);
+            }
+
+            #[test]
+            fn should_return_true() {
+                let tool1: Box<dyn Tool> = Box::new(DummyTool("1.2.3"));
+                let tool2: Box<dyn Tool> = Box::new(DummyTool("1.2.3"));
+                assert!(tool1 == tool2);
             }
         }
     }
