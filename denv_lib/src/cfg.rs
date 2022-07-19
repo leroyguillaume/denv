@@ -1,13 +1,13 @@
 #[cfg(test)]
-use crate::util::fs::StubFileSystem;
+use crate::internal::fs::StubFileSystem;
 use crate::{
-    tool::terraform::*,
-    tool::*,
-    util::{
+    internal::{
         downloader::*,
         fs::{DefaultFileSystem, FileSystem},
         zip::*,
     },
+    tool::terraform::*,
+    tool::*,
 };
 use hex::encode;
 use home::home_dir;

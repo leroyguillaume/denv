@@ -114,7 +114,7 @@ impl Tool for DummyTool {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::util::{downloader::*, fs::*, zip::*};
+    use crate::internal::{downloader::*, fs::*, zip::*};
     use maplit::{hashmap, hashset};
     use reqwest::blocking::get;
     use std::{io, path::PathBuf};

@@ -79,7 +79,7 @@ impl Tool for Terraform {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::util::{downloader::*, fs::*, zip::*};
+    use crate::internal::{downloader::*, fs::*, zip::*};
     use reqwest::blocking::get;
     use std::{fs::File, io, path::PathBuf};
     use tempfile::tempdir;
