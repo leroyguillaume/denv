@@ -9,15 +9,24 @@ use logger::Logger;
 use std::{path::PathBuf, process::exit};
 
 #[derive(Parser)]
-#[clap(author, version, about)]
+#[clap(name = "D-Env", author, version, about)]
 struct Args {
-    #[clap(short = 'f', long = "config", help = "Configuration file")]
+    #[clap(
+        short = 'f',
+        long = "config",
+        name = "CONFIG_FILE",
+        help = "Configuration file"
+    )]
     cfg_filepath: Option<PathBuf>,
 
     #[clap(long, help = "Disable logs color")]
     no_color: bool,
 
-    #[clap(long = "denv-directory", help = "D-Env directory (default: ~/.denv)")]
+    #[clap(
+        long = "denv-directory",
+        name = "DENV_DIR",
+        help = "D-Env directory (default: ~/.denv)"
+    )]
     root_dirpath: Option<PathBuf>,
 
     #[clap(flatten)]
