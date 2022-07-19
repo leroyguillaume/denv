@@ -119,7 +119,7 @@ impl Software for DummySoftware {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::internal::{downloader::*, fs::*, zip::*};
+    use crate::internal::{downloader::*, fs::*, unzip::*};
     use maplit::{hashmap, hashset};
     use reqwest::blocking::get;
     use std::{io, path::PathBuf};

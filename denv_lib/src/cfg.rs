@@ -4,7 +4,7 @@ use crate::{
     internal::{
         downloader::*,
         fs::{DefaultFileSystem, FileSystem},
-        zip::*,
+        unzip::*,
     },
     software::terraform::*,
     software::*,

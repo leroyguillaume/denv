@@ -1,3 +1,3 @@
 pub mod downloader;
 pub mod fs;
-pub mod zip;
+pub mod unzip;
