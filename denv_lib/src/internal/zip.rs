@@ -82,6 +82,7 @@ mod test {
         fs::{create_dir_all, File},
     };
     use tempfile::tempdir;
+    use zip::{write::FileOptions, ZipWriter};
 
     mod unzipper {
         use super::*;
@@ -116,10 +117,16 @@ mod test {
 
             #[test]
             fn should_return_unzip_failed_err() {
-                let zip_filepath = Path::new("resources/tests/unziper/test.zip");
-                let filepath = "test2";
+                let expected = "Hello world!";
+                let dirpath = tempdir().unwrap().into_path();
+                let zip_filepath = dirpath.join("terraform.zip");
+                let file = File::create(&zip_filepath).unwrap();
+                let mut zip = ZipWriter::new(file);
+                zip.start_file("test", FileOptions::default()).unwrap();
+                zip.write_all(expected.as_bytes()).unwrap();
+                zip.finish().unwrap();
                 let mut out = vec![];
-                match DefaultUnzipper.unzip(zip_filepath, filepath, &mut out) {
+                match DefaultUnzipper.unzip(&zip_filepath, "test2", &mut out) {
                     Ok(_) => panic!("should fail"),
                     Err(UnzipError::UnzipFailed(_)) => {}
                     Err(err) => panic!("{}", err),
@@ -128,10 +135,20 @@ mod test {
 
             #[test]
             fn should_extract_file() {
+                let filepath = "test";
+                let expected = "Hello world!";
+                let dirpath = tempdir().unwrap().into_path();
+                let zip_filepath = dirpath.join("terraform.zip");
+                let file = File::create(&zip_filepath).unwrap();
+                let mut zip = ZipWriter::new(file);
+                zip.start_file(filepath, FileOptions::default()).unwrap();
+                zip.write_all(expected.as_bytes()).unwrap();
+                zip.finish().unwrap();
                 let mut out = vec![];
-                let filepath = Path::new("resources/tests/unziper/test.zip");
-                DefaultUnzipper.unzip(filepath, "test", &mut out).unwrap();
-                assert_eq!(String::from_utf8(out).unwrap(), "test\n");
+                DefaultUnzipper
+                    .unzip(&zip_filepath, filepath, &mut out)
+                    .unwrap();
+                assert_eq!(String::from_utf8(out).unwrap(), expected);
             }
         }
     }

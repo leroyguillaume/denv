@@ -54,7 +54,7 @@ impl Config {
         let cfg = read_to_string(filepath).map_err(LoadingError::FileOpeningFailed)?;
         let cfg =
             serde_yaml::from_str::<serde_json::Value>(&cfg).map_err(LoadingError::InvalidYaml)?;
-        let schema = include_str!("../resources/main/config.schema.json");
+        let schema = include_str!("../config.schema.json");
         let schema = serde_json::from_str(schema).unwrap();
         let schema = JSONSchema::compile(&schema).unwrap();
         if let Err(err_iter) = schema.validate(&cfg) {
@@ -114,6 +114,8 @@ impl Config {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::{fs::File, io::Write};
+    use tempfile::tempdir;
 
     mod loading_error {
         use super::*;
@@ -175,7 +177,7 @@ mod test {
 
             #[test]
             fn should_return_file_opening_failed() {
-                let expected = Path::new("resources/tests/config/not-found.yml");
+                let expected = Path::new("denv.yaml");
                 match Config::load(expected) {
                     Ok(_) => panic!("should fail"),
                     Err(LoadingError::FileOpeningFailed(_)) => {}
@@ -185,7 +187,11 @@ mod test {
 
             #[test]
             fn should_return_invalid_yaml_err() {
-                let expected = Path::new("resources/tests/config/invalid-yaml.yml");
+                let dirpath = tempdir().unwrap().into_path();
+                let filepath = dirpath.join("denv.yml");
+                let mut file = File::create(&filepath).unwrap();
+                write!(file, "{{").unwrap();
+                let expected = Path::new(&filepath);
                 match Config::load(expected) {
                     Ok(_) => panic!("should fail"),
                     Err(LoadingError::InvalidYaml(_)) => {}
@@ -195,7 +201,11 @@ mod test {
 
             #[test]
             fn should_return_invalid_config_err() {
-                let expected = Path::new("resources/tests/config/invalid-config.yml");
+                let dirpath = tempdir().unwrap().into_path();
+                let filepath = dirpath.join("denv.yml");
+                let mut file = File::create(&filepath).unwrap();
+                write!(file, "softwares: terraform").unwrap();
+                let expected = Path::new(&filepath);
                 match Config::load(expected) {
                     Ok(_) => panic!("should fail"),
                     Err(LoadingError::InvalidConfig(_)) => {}
@@ -206,7 +216,7 @@ mod test {
             #[test]
             fn should_return_config() {
                 let expected: Vec<Box<dyn Software>> = vec![Box::new(Terraform("1.2.3".into()))];
-                let cfg = Config::load(Path::new("resources/tests/config/denv.yml")).unwrap();
+                let cfg = Config::load(Path::new("../examples/denv.yml")).unwrap();
                 assert_eq!(cfg.softwares(), expected);
             }
         }
