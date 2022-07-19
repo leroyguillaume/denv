@@ -3,6 +3,7 @@ mod logger;
 use clap::Parser;
 use clap_verbosity_flag::Verbosity;
 use denv_lib::cfg::{Config, LoadingError};
+use home::home_dir;
 use log::{debug, error, info};
 use logger::Logger;
 use std::{path::PathBuf, process::exit};
@@ -16,12 +17,22 @@ struct Args {
     #[clap(long, help = "Disable logs color")]
     no_color: bool,
 
+    #[clap(long = "denv-directory", help = "D-Env directory (default: ~/.denv)")]
+    root_dirpath: Option<PathBuf>,
+
     #[clap(flatten)]
     verbose: Verbosity,
 }
 
 fn main() {
     let args = Args::parse();
+    let root_dirpath = args.root_dirpath.unwrap_or_else(|| match home_dir() {
+        Some(home_dirpath) => home_dirpath.join(".denv"),
+        None => {
+            error!("Unable to get user home directory");
+            exit(exitcode::UNAVAILABLE);
+        }
+    });
     Logger::init(args.verbose.log_level_filter(), !args.no_color).unwrap();
     let cfg_filepath = args.cfg_filepath.unwrap_or_else(|| {
         let path = PathBuf::from("denv.yml");
@@ -31,7 +42,7 @@ fn main() {
             PathBuf::from("denv.yaml")
         }
     });
-    let cfg = match Config::load(&cfg_filepath) {
+    let cfg = match Config::load(&cfg_filepath, root_dirpath) {
         Ok(cfg) => cfg,
         Err(LoadingError::FileOpeningFailed(err)) => {
             error!("Unable to open {}: {}", cfg_filepath.display(), err);

@@ -342,6 +342,7 @@ dependencies = [
  "clap-verbosity-flag",
  "denv_lib",
  "exitcode",
+ "home",
  "log",
 ]
 
@@ -350,7 +351,6 @@ name = "denv_lib"
 version = "0.1.0"
 dependencies = [
  "hex",
- "home",
  "jsonschema",
  "log",
  "maplit",

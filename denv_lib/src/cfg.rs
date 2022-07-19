@@ -10,7 +10,6 @@ use crate::{
     software::*,
 };
 use hex::encode;
-use home::home_dir;
 use jsonschema::JSONSchema;
 use log::debug;
 use sha2::{Digest, Sha256};
@@ -19,7 +18,7 @@ use std::{
     fmt::{self, Display, Formatter},
     fs::read_to_string,
     io,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 #[derive(Debug)]
@@ -27,7 +26,6 @@ pub enum LoadingError {
     FileOpeningFailed(io::Error),
     InvalidYaml(serde_yaml::Error),
     InvalidConfig(Vec<String>),
-    HomeDirNotFound,
 }
 
 impl Display for LoadingError {
@@ -36,7 +34,6 @@ impl Display for LoadingError {
             Self::FileOpeningFailed(err) => write!(f, "{}", err),
             Self::InvalidYaml(err) => write!(f, "Invalid YAML syntax: {}", err),
             Self::InvalidConfig(_) => write!(f, "Invalid configuration file"),
-            Self::HomeDirNotFound => write!(f, "Unable to get user home directory"),
         }
     }
 }
@@ -49,7 +46,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(filepath: &Path) -> Result<Self, LoadingError> {
+    pub fn load(filepath: &Path, root_dirpath: PathBuf) -> Result<Self, LoadingError> {
         debug!("Loading configuration from {}", filepath.display());
         let cfg = read_to_string(filepath).map_err(LoadingError::FileOpeningFailed)?;
         let cfg =
@@ -67,17 +64,9 @@ impl Config {
                 softwares.push(Box::new(Terraform(cfg_softwares.as_str().unwrap().into())));
             }
         }
-        let fs_root_dirpath = match home_dir() {
-            Some(home_dirpath) => home_dirpath.join(".denv"),
-            None => {
-                let err = LoadingError::HomeDirNotFound;
-                debug!("{}", err);
-                return Err(err);
-            }
-        };
         let cfg = Self {
             softwares,
-            fs: Box::new(DefaultFileSystem::new(fs_root_dirpath, temp_dir())),
+            fs: Box::new(DefaultFileSystem::new(root_dirpath, temp_dir())),
             downloader: Box::new(DefaultDownloader),
             unzipper: Box::new(DefaultUnzipper),
         };
@@ -156,16 +145,6 @@ mod test {
                     assert_eq!(err.to_string(), "Invalid configuration file");
                 }
             }
-
-            mod home_dir_not_found {
-                use super::*;
-
-                #[test]
-                fn should_return_string() {
-                    let expected = "Unable to get user home directory";
-                    assert_eq!(LoadingError::HomeDirNotFound.to_string(), expected);
-                }
-            }
         }
     }
 
@@ -177,8 +156,7 @@ mod test {
 
             #[test]
             fn should_return_file_opening_failed() {
-                let expected = Path::new("denv.yaml");
-                match Config::load(expected) {
+                match Config::load(Path::new("denv.yaml"), PathBuf::from(".denv")) {
                     Ok(_) => panic!("should fail"),
                     Err(LoadingError::FileOpeningFailed(_)) => {}
                     Err(err) => panic!("{}", err),
@@ -191,8 +169,7 @@ mod test {
                 let filepath = dirpath.join("denv.yml");
                 let mut file = File::create(&filepath).unwrap();
                 write!(file, "{{").unwrap();
-                let expected = Path::new(&filepath);
-                match Config::load(expected) {
+                match Config::load(Path::new(&filepath), PathBuf::from(".denv")) {
                     Ok(_) => panic!("should fail"),
                     Err(LoadingError::InvalidYaml(_)) => {}
                     Err(err) => panic!("{}", err),
@@ -205,8 +182,7 @@ mod test {
                 let filepath = dirpath.join("denv.yml");
                 let mut file = File::create(&filepath).unwrap();
                 write!(file, "softwares: terraform").unwrap();
-                let expected = Path::new(&filepath);
-                match Config::load(expected) {
+                match Config::load(Path::new(&filepath), PathBuf::from(".denv")) {
                     Ok(_) => panic!("should fail"),
                     Err(LoadingError::InvalidConfig(_)) => {}
                     Err(err) => panic!("{}", err),
@@ -215,9 +191,12 @@ mod test {
 
             #[test]
             fn should_return_config() {
-                let expected: Vec<Box<dyn Software>> = vec![Box::new(Terraform("1.2.3".into()))];
-                let cfg = Config::load(Path::new("../examples/denv.yml")).unwrap();
-                assert_eq!(cfg.softwares(), expected);
+                let softwares: Vec<Box<dyn Software>> = vec![Box::new(Terraform("1.2.3".into()))];
+                let root_dirpath = PathBuf::from(".denv");
+                let cfg =
+                    Config::load(Path::new("../examples/denv.yml"), root_dirpath.clone()).unwrap();
+                assert_eq!(cfg.softwares(), softwares);
+                assert_eq!(cfg.fs.root_dirpath(), root_dirpath);
             }
         }
 

@@ -12,6 +12,7 @@ clap = { version = "3.2", features = ["derive"] }
 clap-verbosity-flag = "1.0"
 denv_lib = { path = "../denv_lib" }
 exitcode = "1.1"
+home = "0.5"
 log = { version = "0.4", features = ["std"] }
 
 [dev-dependencies]
