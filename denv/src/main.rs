@@ -1,8 +1,9 @@
 mod logger;
 
 use clap::Parser;
+use clap_verbosity_flag::Verbosity;
 use denv_lib::cfg::{Config, LoadingError};
-use log::{debug, error, info, LevelFilter};
+use log::{debug, error, info};
 use logger::Logger;
 use std::{path::PathBuf, process::exit};
 
@@ -14,11 +15,14 @@ struct Args {
 
     #[clap(long, help = "Disable logs color")]
     no_color: bool,
+
+    #[clap(flatten)]
+    verbose: Verbosity,
 }
 
 fn main() {
     let args = Args::parse();
-    Logger::init(LevelFilter::Trace, !args.no_color).unwrap();
+    Logger::init(args.verbose.log_level_filter(), !args.no_color).unwrap();
     let cfg_filepath = args
         .cfg_filepath
         .unwrap_or_else(|| PathBuf::from("denv.yaml"));

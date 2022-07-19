@@ -9,6 +9,7 @@ description = "Manage environment variables and softwares versions per directory
 
 [dependencies]
 clap = { version = "3.2", features = ["derive"] }
+clap-verbosity-flag = "1.0"
 denv_lib = { path = "../denv_lib" }
 exitcode = "1.1"
 log = { version = "0.4", features = ["std"] }
