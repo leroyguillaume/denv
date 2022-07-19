@@ -40,7 +40,7 @@ macro_rules! software_dirpath {
 }
 
 const SOFTWARES_DIRNAME: &str = "softwares";
-const CFGS_DIRNAME: &str = "configurations";
+const CONFIGURATIONS_DIRNAME: &str = "configurations";
 
 pub type Result<T> = std::result::Result<T, FileSystemError>;
 
@@ -81,7 +81,10 @@ impl FileSystem for DefaultFileSystem {
 
     fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()> {
         let src_filepath = software_dirpath!(self.root_dirpath, name, version).join(name);
-        let dest_dirpath = self.root_dirpath.join(CFGS_DIRNAME).join(cfg_sha256);
+        let dest_dirpath = self
+            .root_dirpath
+            .join(CONFIGURATIONS_DIRNAME)
+            .join(cfg_sha256);
         ensure_dir!(&dest_dirpath)?;
         let dest_filepath = dest_dirpath.join(name);
         debug!(
@@ -274,7 +277,10 @@ mod test {
                 let cfg_sha256 = "sha256";
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let filepath = root_dirpath.join(CFGS_DIRNAME).join(cfg_sha256).join(name);
+                let filepath = root_dirpath
+                    .join(CONFIGURATIONS_DIRNAME)
+                    .join(cfg_sha256)
+                    .join(name);
                 create_dir_all(filepath.parent().unwrap()).unwrap();
                 write(filepath, "").unwrap();
                 let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
@@ -295,7 +301,10 @@ mod test {
                     .join(name)
                     .join(version)
                     .join(name);
-                let dest_filepath = root_dirpath.join(CFGS_DIRNAME).join(cfg_sha256).join(name);
+                let dest_filepath = root_dirpath
+                    .join(CONFIGURATIONS_DIRNAME)
+                    .join(cfg_sha256)
+                    .join(name);
                 let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
                 fs.create_bin_symlink(name, version, cfg_sha256).unwrap();
                 assert!(dest_filepath.is_symlink());
