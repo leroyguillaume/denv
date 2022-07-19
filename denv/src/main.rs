@@ -4,11 +4,14 @@ use clap::Parser;
 use denv_lib::cfg::{Config, LoadingError};
 use log::{debug, error, info, LevelFilter};
 use logger::Logger;
-use std::{path::Path, process::exit};
+use std::{path::PathBuf, process::exit};
 
 #[derive(Parser)]
 #[clap(author, version, about)]
 struct Args {
+    #[clap(short = 'f', long = "config", help = "Configuration file")]
+    cfg_filepath: Option<PathBuf>,
+
     #[clap(long, help = "Disable logs color")]
     no_color: bool,
 }
@@ -16,8 +19,10 @@ struct Args {
 fn main() {
     let args = Args::parse();
     Logger::init(LevelFilter::Trace, !args.no_color).unwrap();
-    let cfg_filepath = Path::new("denv.yaml");
-    let cfg = match Config::load(cfg_filepath) {
+    let cfg_filepath = args
+        .cfg_filepath
+        .unwrap_or_else(|| PathBuf::from("denv.yaml"));
+    let cfg = match Config::load(&cfg_filepath) {
         Ok(cfg) => cfg,
         Err(LoadingError::FileOpeningFailed(err)) => {
             error!("Unable to open {}: {}", cfg_filepath.display(), err);
