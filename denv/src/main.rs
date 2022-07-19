@@ -23,9 +23,14 @@ struct Args {
 fn main() {
     let args = Args::parse();
     Logger::init(args.verbose.log_level_filter(), !args.no_color).unwrap();
-    let cfg_filepath = args
-        .cfg_filepath
-        .unwrap_or_else(|| PathBuf::from("denv.yaml"));
+    let cfg_filepath = args.cfg_filepath.unwrap_or_else(|| {
+        let path = PathBuf::from("denv.yml");
+        if path.exists() {
+            path
+        } else {
+            PathBuf::from("denv.yaml")
+        }
+    });
     let cfg = match Config::load(&cfg_filepath) {
         Ok(cfg) => cfg,
         Err(LoadingError::FileOpeningFailed(err)) => {
