@@ -3,8 +3,8 @@
     "description": "D-Env configuration file",
     "type": "object",
     "properties": {
-        "tools": {
-            "description": "Tools definition",
+        "softwares": {
+            "description": "Softwares versions definition",
             "type": "object",
             "properties": {
                 "terraform": {

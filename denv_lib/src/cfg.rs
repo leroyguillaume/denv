@@ -6,8 +6,8 @@ use crate::{
         fs::{DefaultFileSystem, FileSystem},
         zip::*,
     },
-    tool::terraform::*,
-    tool::*,
+    software::terraform::*,
+    software::*,
 };
 use hex::encode;
 use home::home_dir;
@@ -42,7 +42,7 @@ impl Display for LoadingError {
 }
 
 pub struct Config {
-    tools: Vec<Box<dyn Tool>>,
+    softwares: Vec<Box<dyn Software>>,
     pub(crate) fs: Box<dyn FileSystem>,
     pub(crate) downloader: Box<dyn Downloader>,
     pub(crate) unzipper: Box<dyn Unzipper>,
@@ -61,10 +61,10 @@ impl Config {
             let errs = err_iter.map(|err| err.to_string()).collect();
             return Err(LoadingError::InvalidConfig(errs));
         }
-        let mut tools: Vec<Box<dyn Tool>> = vec![];
-        if let Some(cfg_tools) = cfg.get("tools") {
-            if let Some(cfg_tool) = cfg_tools.get("terraform") {
-                tools.push(Box::new(Terraform(cfg_tool.as_str().unwrap().into())));
+        let mut softwares: Vec<Box<dyn Software>> = vec![];
+        if let Some(cfg_softwares) = cfg.get("softwares") {
+            if let Some(cfg_softwares) = cfg_softwares.get("terraform") {
+                softwares.push(Box::new(Terraform(cfg_softwares.as_str().unwrap().into())));
             }
         }
         let fs_root_dirpath = match home_dir() {
@@ -76,7 +76,7 @@ impl Config {
             }
         };
         let cfg = Self {
-            tools,
+            softwares,
             fs: Box::new(DefaultFileSystem::new(fs_root_dirpath, temp_dir())),
             downloader: Box::new(DefaultDownloader),
             unzipper: Box::new(DefaultUnzipper),
@@ -86,16 +86,16 @@ impl Config {
 
     pub fn sha256(&self) -> String {
         let mut hasher = Sha256::new();
-        for tool in &self.tools {
-            hasher.update(tool.name());
-            hasher.update(tool.version());
+        for software in &self.softwares {
+            hasher.update(software.name());
+            hasher.update(software.version());
         }
         let sha256 = hasher.finalize();
         encode(sha256)
     }
 
-    pub fn tools(&self) -> &[Box<dyn Tool>] {
-        &self.tools
+    pub fn softwares(&self) -> &[Box<dyn Software>] {
+        &self.softwares
     }
 }
 
@@ -103,7 +103,7 @@ impl Config {
 impl Config {
     pub fn stub(fs: StubFileSystem, downloader: StubDownloader, unziper: StubUnzipper) -> Self {
         Self {
-            tools: vec![],
+            softwares: vec![],
             downloader: Box::new(downloader),
             fs: Box::new(fs),
             unzipper: Box::new(unziper),
@@ -205,9 +205,9 @@ mod test {
 
             #[test]
             fn should_return_config() {
-                let expected: Vec<Box<dyn Tool>> = vec![Box::new(Terraform("1.2.3".into()))];
+                let expected: Vec<Box<dyn Software>> = vec![Box::new(Terraform("1.2.3".into()))];
                 let cfg = Config::load(Path::new("resources/tests/config/denv.yml")).unwrap();
-                assert_eq!(cfg.tools(), expected);
+                assert_eq!(cfg.softwares(), expected);
             }
         }
 
@@ -221,33 +221,33 @@ mod test {
                     StubDownloader::new(),
                     StubUnzipper::new(),
                 );
-                let tool1 = DummyTool("1.2.3");
-                let tool2 = DummyTool("1.2.4");
+                let software1 = DummySoftware("1.2.3");
+                let software2 = DummySoftware("1.2.4");
                 let mut hasher = Sha256::new();
-                hasher.update(tool1.name());
-                hasher.update(tool1.version());
-                hasher.update(tool2.name());
-                hasher.update(tool2.version());
+                hasher.update(software1.name());
+                hasher.update(software1.version());
+                hasher.update(software2.name());
+                hasher.update(software2.version());
                 let expected = encode(hasher.finalize());
-                cfg.tools = vec![Box::new(tool1), Box::new(tool2)];
+                cfg.softwares = vec![Box::new(software1), Box::new(software2)];
                 assert_eq!(cfg.sha256(), expected);
             }
         }
 
-        mod tools {
+        mod softwares {
             use super::*;
 
             #[test]
-            fn should_return_tools() {
+            fn should_return_softwares() {
                 let mut cfg = Config::stub(
                     StubFileSystem::new(),
                     StubDownloader::new(),
                     StubUnzipper::new(),
                 );
-                let tool1 = DummyTool("1.2.3");
-                let tool2 = DummyTool("1.2.4");
-                cfg.tools = vec![Box::new(tool1), Box::new(tool2)];
-                assert_eq!(cfg.tools(), cfg.tools);
+                let software1 = DummySoftware("1.2.3");
+                let software2 = DummySoftware("1.2.4");
+                cfg.softwares = vec![Box::new(software1), Box::new(software2)];
+                assert_eq!(cfg.softwares(), cfg.softwares);
             }
         }
     }

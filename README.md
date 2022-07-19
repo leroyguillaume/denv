@@ -1,6 +1,6 @@
 # D-Env
 
-Manage environment variables and tools versions per directory.
+Manage environment variables and softwares versions per directory.
 
 ## Development
 

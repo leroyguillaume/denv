@@ -30,13 +30,16 @@ macro_rules! open_file {
     }};
 }
 
-macro_rules! tool_dirpath {
+macro_rules! software_dirpath {
     ($root_dirpath:expr, $name:expr, $version:expr) => {
-        $root_dirpath.join(TOOLS_DIRNAME).join($name).join($version)
+        $root_dirpath
+            .join(SOFTWARES_DIRNAME)
+            .join($name)
+            .join($version)
     };
 }
 
-const TOOLS_DIRNAME: &str = "tools";
+const SOFTWARES_DIRNAME: &str = "softwares";
 const CFGS_DIRNAME: &str = "configurations";
 
 pub type Result<T> = std::result::Result<T, FileSystemError>;
@@ -48,7 +51,7 @@ pub trait FileSystem {
 
     fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)>;
 
-    fn is_installed_tool(&self, name: &str, version: &str) -> bool;
+    fn is_installed_software(&self, name: &str, version: &str) -> bool;
 
     fn root_dirpath(&self) -> &Path;
 
@@ -71,13 +74,13 @@ impl DefaultFileSystem {
 
 impl FileSystem for DefaultFileSystem {
     fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)> {
-        let dirpath = tool_dirpath!(self.root_dirpath, name, version);
+        let dirpath = software_dirpath!(self.root_dirpath, name, version);
         ensure_dir!(&dirpath)?;
         open_file!(dirpath.join(name))
     }
 
     fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()> {
-        let src_filepath = tool_dirpath!(self.root_dirpath, name, version).join(name);
+        let src_filepath = software_dirpath!(self.root_dirpath, name, version).join(name);
         let dest_dirpath = self.root_dirpath.join(CFGS_DIRNAME).join(cfg_sha256);
         ensure_dir!(&dest_dirpath)?;
         let dest_filepath = dest_dirpath.join(name);
@@ -93,8 +96,8 @@ impl FileSystem for DefaultFileSystem {
         open_file!(self.tmp_dirpath.join(filename))
     }
 
-    fn is_installed_tool(&self, name: &str, version: &str) -> bool {
-        tool_dirpath!(self.root_dirpath, name, version).is_dir()
+    fn is_installed_software(&self, name: &str, version: &str) -> bool {
+        software_dirpath!(self.root_dirpath, name, version).is_dir()
     }
 
     fn root_dirpath(&self) -> &Path {
@@ -116,7 +119,7 @@ type CreateBinSymlinkFn = dyn Fn(&str, &str, &str) -> Result<()>;
 type CreateTmpFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
-type IsInstalledToolFn = dyn Fn(&str, &str) -> bool;
+type IsInstalledSoftwareFn = dyn Fn(&str, &str) -> bool;
 
 #[cfg(test)]
 #[derive(Default)]
@@ -124,7 +127,7 @@ pub struct StubFileSystem {
     create_bin_file_fn: Option<Box<CreateBinFileFn>>,
     create_bin_symlink_fn: Option<Box<CreateBinSymlinkFn>>,
     create_tmp_file_fn: Option<Box<CreateTmpFileFn>>,
-    is_installed_tool_fn: Option<Box<IsInstalledToolFn>>,
+    is_installed_software_fn: Option<Box<IsInstalledSoftwareFn>>,
 }
 
 #[cfg(test)]
@@ -157,11 +160,11 @@ impl StubFileSystem {
         self
     }
 
-    pub fn with_is_installed_tool_fn<F: Fn(&str, &str) -> bool + 'static>(
+    pub fn with_is_installed_software_fn<F: Fn(&str, &str) -> bool + 'static>(
         mut self,
-        is_installed_tool_fn: F,
+        is_installed_software_fn: F,
     ) -> Self {
-        self.is_installed_tool_fn = Some(Box::new(is_installed_tool_fn));
+        self.is_installed_software_fn = Some(Box::new(is_installed_software_fn));
         self
     }
 }
@@ -189,9 +192,9 @@ impl FileSystem for StubFileSystem {
         }
     }
 
-    fn is_installed_tool(&self, name: &str, version: &str) -> bool {
-        match &self.is_installed_tool_fn {
-            Some(is_installed_tool_fn) => is_installed_tool_fn(name, version),
+    fn is_installed_software(&self, name: &str, version: &str) -> bool {
+        match &self.is_installed_software_fn {
+            Some(is_installed_software_fn) => is_installed_software_fn(name, version),
             None => unimplemented!(),
         }
     }
@@ -251,7 +254,7 @@ mod test {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let expected = root_dirpath
-                    .join(TOOLS_DIRNAME)
+                    .join(SOFTWARES_DIRNAME)
                     .join(name)
                     .join(version)
                     .join(name);
@@ -288,7 +291,7 @@ mod test {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let src_filepath = root_dirpath
-                    .join(TOOLS_DIRNAME)
+                    .join(SOFTWARES_DIRNAME)
                     .join(name)
                     .join(version)
                     .join(name);
@@ -327,7 +330,7 @@ mod test {
             }
         }
 
-        mod is_installed_tool {
+        mod is_installed_software {
             use super::*;
 
             #[test]
@@ -335,7 +338,7 @@ mod test {
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
-                let is_installed = fs.is_installed_tool("terraform", "1.2.3");
+                let is_installed = fs.is_installed_software("terraform", "1.2.3");
                 assert!(!is_installed);
             }
 
@@ -345,9 +348,15 @@ mod test {
                 let version = "1.2.3";
                 let root_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                create_dir_all(root_dirpath.join(TOOLS_DIRNAME).join(name).join(version)).unwrap();
+                create_dir_all(
+                    root_dirpath
+                        .join(SOFTWARES_DIRNAME)
+                        .join(name)
+                        .join(version),
+                )
+                .unwrap();
                 let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
-                let is_installed = fs.is_installed_tool(name, version);
+                let is_installed = fs.is_installed_software(name, version);
                 assert!(is_installed);
             }
         }

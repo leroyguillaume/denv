@@ -68,11 +68,11 @@ impl Display for InstallError {
     }
 }
 
-pub trait Tool: Debug {
+pub trait Software: Debug {
     fn install(&self, cfg: &Config) -> Result<(), InstallError>;
 
     fn is_installed(&self, cfg: &Config) -> bool {
-        cfg.fs.is_installed_tool(self.name(), self.version())
+        cfg.fs.is_installed_software(self.name(), self.version())
     }
 
     fn name(&self) -> &'static str;
@@ -80,24 +80,24 @@ pub trait Tool: Debug {
     fn version(&self) -> &str;
 }
 
-impl Display for dyn Tool {
+impl Display for dyn Software {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         write!(f, "{} v{}", self.name(), self.version())
     }
 }
 
-impl PartialEq for dyn Tool {
-    fn eq(&self, tool: &dyn Tool) -> bool {
-        self.name() == tool.name() && self.version() == tool.version()
+impl PartialEq for dyn Software {
+    fn eq(&self, software: &dyn Software) -> bool {
+        self.name() == software.name() && self.version() == software.version()
     }
 }
 
 #[cfg(test)]
 #[derive(Clone, Copy, Debug)]
-pub struct DummyTool(pub &'static str);
+pub struct DummySoftware(pub &'static str);
 
 #[cfg(test)]
-impl Tool for DummyTool {
+impl Software for DummySoftware {
     fn install(&self, _cfg: &Config) -> Result<(), InstallError> {
         Ok(())
     }
@@ -206,7 +206,7 @@ mod test {
         }
     }
 
-    mod tool {
+    mod software {
         use super::*;
 
         mod eq {
@@ -214,16 +214,16 @@ mod test {
 
             #[test]
             fn should_return_false() {
-                let tool1: Box<dyn Tool> = Box::new(DummyTool("1.2.3"));
-                let tool2: Box<dyn Tool> = Box::new(DummyTool("1.2.4"));
-                assert!(tool1 != tool2);
+                let software1: Box<dyn Software> = Box::new(DummySoftware("1.2.3"));
+                let software2: Box<dyn Software> = Box::new(DummySoftware("1.2.4"));
+                assert!(software1 != software2);
             }
 
             #[test]
             fn should_return_true() {
-                let tool1: Box<dyn Tool> = Box::new(DummyTool("1.2.3"));
-                let tool2: Box<dyn Tool> = Box::new(DummyTool("1.2.3"));
-                assert!(tool1 == tool2);
+                let software1: Box<dyn Software> = Box::new(DummySoftware("1.2.3"));
+                let software2: Box<dyn Software> = Box::new(DummySoftware("1.2.3"));
+                assert!(software1 == software2);
             }
         }
 
@@ -234,16 +234,16 @@ mod test {
                 ($ident:ident, $expected:expr) => {
                     #[test]
                     fn $ident() {
-                        let tool = DummyTool("1.2.3");
-                        let fs = StubFileSystem::new().with_is_installed_tool_fn(
+                        let software = DummySoftware("1.2.3");
+                        let fs = StubFileSystem::new().with_is_installed_software_fn(
                             move |name, version| {
-                                assert_eq!(name, tool.name());
-                                assert_eq!(version, tool.version());
+                                assert_eq!(name, software.name());
+                                assert_eq!(version, software.version());
                                 $expected
                             },
                         );
                         let cfg = Config::stub(fs, StubDownloader::new(), StubUnzipper::new());
-                        assert_eq!(tool.is_installed(&cfg), $expected);
+                        assert_eq!(software.is_installed(&cfg), $expected);
                     }
                 };
             }
@@ -257,9 +257,9 @@ mod test {
 
             #[test]
             fn should_return_string() {
-                let tool: Box<dyn Tool> = Box::new(DummyTool("1.2.3"));
-                let expected = format!("{} v{}", tool.name(), tool.version());
-                assert_eq!(tool.to_string(), expected);
+                let software: Box<dyn Software> = Box::new(DummySoftware("1.2.3"));
+                let expected = format!("{} v{}", software.name(), software.version());
+                assert_eq!(software.to_string(), expected);
             }
         }
     }

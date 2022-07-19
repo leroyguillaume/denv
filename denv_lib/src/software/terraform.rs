@@ -33,14 +33,14 @@ macro_rules! supported_systems {
     };
 }
 
-const TOOL_NAME: &str = "terraform";
+const SOFTWARE_NAME: &str = "terraform";
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Terraform(pub String);
 
-impl Tool for Terraform {
+impl Software for Terraform {
     fn install(&self, cfg: &Config) -> Result<(), InstallError> {
-        info!("Installing {} v{}", TOOL_NAME, self.0);
+        info!("Installing {} v{}", SOFTWARE_NAME, self.0);
         let os = os!()?;
         let arch = arch!()?;
         let filename = format!("terraform_{}_{}_{}.zip", self.0, os, arch);
@@ -57,18 +57,18 @@ impl Tool for Terraform {
             .map_err(InstallError::DownloadFailed)?;
         let (_, bin_file) = cfg
             .fs
-            .create_bin_file(TOOL_NAME, &self.0)
+            .create_bin_file(SOFTWARE_NAME, &self.0)
             .map_err(InstallError::FileSystemWritingFailed)?;
         let mut file_buf = BufWriter::new(bin_file);
         cfg.unzipper
-            .unzip(&zip_filepath, TOOL_NAME, &mut file_buf)
-            .map_err(|err| InstallError::UnzipFailed(zip_filepath, TOOL_NAME.into(), err))?;
-        info!("{} v{} installed", TOOL_NAME, &self.0);
+            .unzip(&zip_filepath, SOFTWARE_NAME, &mut file_buf)
+            .map_err(|err| InstallError::UnzipFailed(zip_filepath, SOFTWARE_NAME.into(), err))?;
+        info!("{} v{} installed", SOFTWARE_NAME, &self.0);
         Ok(())
     }
 
     fn name(&self) -> &'static str {
-        TOOL_NAME
+        SOFTWARE_NAME
     }
 
     fn version(&self) -> &str {
@@ -177,7 +177,7 @@ mod test {
                                 }
                             })
                             .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, TOOL_NAME);
+                                assert_eq!(name, SOFTWARE_NAME);
                                 assert_eq!(version, expected_version);
                                 Err(FileSystemError::new(PathBuf::from("/error"), io::Error::from(io::ErrorKind::PermissionDenied)))
                             });
@@ -207,7 +207,7 @@ mod test {
                         let os = os!().unwrap();
                         let arch = arch!().unwrap();
                         let expected_zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
-                        let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
+                        let bin_filepath = tempdir().unwrap().into_path().join(SOFTWARE_NAME);
                         let fs = StubFileSystem::new()
                             .with_create_tmp_file_fn({
                                 let expected_zip_filepath = expected_zip_filepath.clone();
@@ -221,7 +221,7 @@ mod test {
                                 }
                             })
                             .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, TOOL_NAME);
+                                assert_eq!(name, SOFTWARE_NAME);
                                 assert_eq!(version, expected_version);
                                 Ok((
                                     bin_filepath.clone(),
@@ -242,7 +242,7 @@ mod test {
                                 let expected_zip_filepath = expected_zip_filepath.clone();
                                 move |zip_filepath, filename, _| {
                                 assert_eq!(zip_filepath, expected_zip_filepath);
-                                assert_eq!(filename, TOOL_NAME);
+                                assert_eq!(filename, SOFTWARE_NAME);
                                 Err(UnzipError::FileOpeningFailed(
                                     io::Error::from(io::ErrorKind::PermissionDenied)
                                 ))
@@ -252,7 +252,7 @@ mod test {
                             Ok(_) => panic!("should fail"),
                             Err(InstallError::UnzipFailed(zip_filepath, filepath, _)) => {
                                 assert_eq!(zip_filepath, expected_zip_filepath);
-                                assert_eq!(filepath, TOOL_NAME);
+                                assert_eq!(filepath, SOFTWARE_NAME);
                             },
                             Err(err) => panic!("{}", err),
                         }
@@ -266,7 +266,7 @@ mod test {
                         let os = os!().unwrap();
                         let arch = arch!().unwrap();
                         let zip_filepath = tempdir().unwrap().into_path().join("terraform.zip");
-                        let bin_filepath = tempdir().unwrap().into_path().join(TOOL_NAME);
+                        let bin_filepath = tempdir().unwrap().into_path().join(SOFTWARE_NAME);
                         let fs = StubFileSystem::new()
                             .with_create_tmp_file_fn({
                                 let zip_filepath = zip_filepath.clone();
@@ -280,7 +280,7 @@ mod test {
                                 }
                             })
                             .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, TOOL_NAME);
+                                assert_eq!(name, SOFTWARE_NAME);
                                 assert_eq!(version, expected_version);
                                 Ok((
                                     bin_filepath.clone(),
@@ -299,7 +299,7 @@ mod test {
                         let unziper = StubUnzipper::new()
                             .with_unzip_fn(move |filepath, filename, _| {
                                 assert_eq!(filepath, zip_filepath);
-                                assert_eq!(filename, TOOL_NAME);
+                                assert_eq!(filename, SOFTWARE_NAME);
                                 Ok(())
                             });
                         let cfg = Config::stub(fs, downloader, unziper);
@@ -322,7 +322,7 @@ mod test {
             #[test]
             fn should_return_name() {
                 let tf = Terraform("1.2.3".into());
-                assert_eq!(tf.name(), TOOL_NAME);
+                assert_eq!(tf.name(), SOFTWARE_NAME);
             }
         }
 
