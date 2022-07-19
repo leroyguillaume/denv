@@ -68,7 +68,7 @@ impl Config {
             }
         }
         let fs_root_dirpath = match home_dir() {
-            Some(home_dirpath) => home_dirpath,
+            Some(home_dirpath) => home_dirpath.join(".denv"),
             None => {
                 let err = LoadingError::HomeDirNotFound;
                 debug!("{}", err);
