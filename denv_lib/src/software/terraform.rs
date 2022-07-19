@@ -1,5 +1,5 @@
 use super::*;
-use log::info;
+use log::debug;
 use std::io::BufWriter;
 
 macro_rules! arch {
@@ -40,7 +40,7 @@ pub struct Terraform(pub String);
 
 impl Software for Terraform {
     fn install(&self, cfg: &Config) -> Result<(), InstallError> {
-        info!("Installing {} v{}", SOFTWARE_NAME, self.0);
+        debug!("Installing {}", self as &dyn Software);
         let os = os!()?;
         let arch = arch!()?;
         let filename = format!("terraform_{}_{}_{}.zip", self.0, os, arch);
@@ -63,7 +63,7 @@ impl Software for Terraform {
         cfg.unzipper
             .unzip(&zip_filepath, SOFTWARE_NAME, &mut file_buf)
             .map_err(|err| InstallError::UnzipFailed(zip_filepath, SOFTWARE_NAME.into(), err))?;
-        info!("{} v{} installed", SOFTWARE_NAME, &self.0);
+        debug!("{} installed", self as &dyn Software);
         Ok(())
     }
 
