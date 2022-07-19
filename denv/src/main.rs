@@ -2,17 +2,20 @@ mod logger;
 
 use clap::Parser;
 use denv_lib::cfg::{Config, LoadingError};
-use log::{debug, error, info, Level};
+use log::{debug, error, info, LevelFilter};
 use logger::Logger;
 use std::{path::Path, process::exit};
 
 #[derive(Parser)]
 #[clap(author, version, about)]
-struct Args;
+struct Args {
+    #[clap(long, help = "Disable logs color")]
+    no_color: bool,
+}
 
 fn main() {
-    let _args = Args::parse();
-    Logger::init(Level::Trace).unwrap();
+    let args = Args::parse();
+    Logger::init(LevelFilter::Trace, !args.no_color).unwrap();
     let cfg_filepath = Path::new("denv.yaml");
     let cfg = match Config::load(cfg_filepath) {
         Ok(cfg) => cfg,
