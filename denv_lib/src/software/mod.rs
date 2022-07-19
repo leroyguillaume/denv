@@ -69,6 +69,11 @@ impl Display for InstallError {
 }
 
 pub trait Software: Debug {
+    fn add_to_path(&self, cfg: &Config) -> Result<(), FileSystemError> {
+        cfg.fs
+            .create_bin_symlink(self.name(), self.version(), &cfg.sha256())
+    }
+
     fn install(&self, cfg: &Config) -> Result<(), InstallError>;
 
     fn is_installed(&self, cfg: &Config) -> bool {
@@ -208,6 +213,51 @@ mod test {
 
     mod software {
         use super::*;
+
+        mod add_to_path {
+            use super::*;
+
+            #[test]
+            fn should_return_err() {
+                let software = DummySoftware("1.2.3");
+                let fs = StubFileSystem::new().with_create_bin_symlink_fn(
+                    move |name, version, cfg_sha256| {
+                        assert_eq!(name, software.name());
+                        assert_eq!(version, software.version());
+                        assert_eq!(
+                            cfg_sha256,
+                            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                        );
+                        Err(FileSystemError::new(
+                            PathBuf::from("/error"),
+                            io::Error::from(io::ErrorKind::PermissionDenied),
+                        ))
+                    },
+                );
+                let cfg = Config::stub(fs, StubDownloader::new(), StubUnzipper::new());
+                if software.add_to_path(&cfg).is_ok() {
+                    panic!("should fail");
+                }
+            }
+
+            #[test]
+            fn should_create_symlink() {
+                let software = DummySoftware("1.2.3");
+                let fs = StubFileSystem::new().with_create_bin_symlink_fn(
+                    move |name, version, cfg_sha256| {
+                        assert_eq!(name, software.name());
+                        assert_eq!(version, software.version());
+                        assert_eq!(
+                            cfg_sha256,
+                            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                        );
+                        Ok(())
+                    },
+                );
+                let cfg = Config::stub(fs, StubDownloader::new(), StubUnzipper::new());
+                software.add_to_path(&cfg).unwrap();
+            }
+        }
 
         mod eq {
             use super::*;
