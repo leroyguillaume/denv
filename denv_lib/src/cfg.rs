@@ -14,7 +14,6 @@ use jsonschema::JSONSchema;
 use log::debug;
 use sha2::{Digest, Sha256};
 use std::{
-    env::temp_dir,
     fmt::{self, Display, Formatter},
     fs::read_to_string,
     io,
@@ -46,7 +45,11 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(filepath: &Path, denv_dirpath: PathBuf) -> Result<Self, LoadingError> {
+    pub fn load(
+        filepath: &Path,
+        denv_dirpath: PathBuf,
+        tmp_dirpath: PathBuf,
+    ) -> Result<Self, LoadingError> {
         debug!("Loading configuration from {}", filepath.display());
         let cfg = read_to_string(filepath).map_err(LoadingError::FileOpeningFailed)?;
         let cfg =
@@ -66,7 +69,7 @@ impl Config {
         }
         let cfg = Self {
             softwares,
-            fs: Box::new(DefaultFileSystem::new(denv_dirpath, temp_dir())),
+            fs: Box::new(DefaultFileSystem::new(denv_dirpath, tmp_dirpath)),
             downloader: Box::new(DefaultDownloader),
             unzipper: Box::new(DefaultUnzipper),
         };
@@ -156,7 +159,11 @@ mod test {
 
             #[test]
             fn should_return_file_opening_failed() {
-                match Config::load(Path::new("denv.yaml"), PathBuf::from(".denv")) {
+                match Config::load(
+                    Path::new("denv.yaml"),
+                    PathBuf::from(".denv"),
+                    PathBuf::from("/tmp/denv"),
+                ) {
                     Ok(_) => panic!("should fail"),
                     Err(LoadingError::FileOpeningFailed(_)) => {}
                     Err(err) => panic!("{}", err),
@@ -169,7 +176,11 @@ mod test {
                 let filepath = dirpath.join("denv.yml");
                 let mut file = File::create(&filepath).unwrap();
                 write!(file, "{{").unwrap();
-                match Config::load(Path::new(&filepath), PathBuf::from(".denv")) {
+                match Config::load(
+                    Path::new(&filepath),
+                    PathBuf::from(".denv"),
+                    PathBuf::from("/tmp/denv"),
+                ) {
                     Ok(_) => panic!("should fail"),
                     Err(LoadingError::InvalidYaml(_)) => {}
                     Err(err) => panic!("{}", err),
@@ -182,7 +193,11 @@ mod test {
                 let filepath = dirpath.join("denv.yml");
                 let mut file = File::create(&filepath).unwrap();
                 write!(file, "softwares: terraform").unwrap();
-                match Config::load(Path::new(&filepath), PathBuf::from(".denv")) {
+                match Config::load(
+                    Path::new(&filepath),
+                    PathBuf::from(".denv"),
+                    PathBuf::from("/tmp/denv"),
+                ) {
                     Ok(_) => panic!("should fail"),
                     Err(LoadingError::InvalidConfig(_)) => {}
                     Err(err) => panic!("{}", err),
@@ -193,10 +208,16 @@ mod test {
             fn should_return_config() {
                 let softwares: Vec<Box<dyn Software>> = vec![Box::new(Terraform("1.2.3".into()))];
                 let denv_dirpath = PathBuf::from(".denv");
-                let cfg =
-                    Config::load(Path::new("../examples/denv.yml"), denv_dirpath.clone()).unwrap();
+                let tmp_dirpath = PathBuf::from("/tmp/denv");
+                let cfg = Config::load(
+                    Path::new("../examples/denv.yml"),
+                    denv_dirpath.clone(),
+                    tmp_dirpath.clone(),
+                )
+                .unwrap();
                 assert_eq!(cfg.softwares(), softwares);
                 assert_eq!(cfg.fs.denv_dirpath(), denv_dirpath);
+                assert_eq!(cfg.fs.tmp_dirpath(), tmp_dirpath);
             }
         }
 

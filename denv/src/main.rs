@@ -6,7 +6,7 @@ use denv_lib::cfg::{Config, LoadingError};
 use home::home_dir;
 use log::{debug, error, info};
 use logger::Logger;
-use std::{path::PathBuf, process::exit};
+use std::{env::temp_dir, path::PathBuf, process::exit};
 
 #[derive(Parser)]
 #[clap(name = "D-Env", author, version, about)]
@@ -22,12 +22,11 @@ struct Args {
     #[clap(long, help = "Disable logs color")]
     no_color: bool,
 
-    #[clap(
-        long = "denv-directory",
-        name = "DENV_DIR",
-        help = "D-Env directory (default: ~/.denv)"
-    )]
+    #[clap(long = "denv-directory", name = "DENV_DIR", help = "D-Env directory")]
     denv_dirpath: Option<PathBuf>,
+
+    #[clap(long = "tmp-directory", name = "TMP_DIR", help = "Temporary directory")]
+    tmp_dirpath: Option<PathBuf>,
 
     #[clap(flatten)]
     verbose: Verbosity,
@@ -42,6 +41,7 @@ fn main() {
             exit(exitcode::UNAVAILABLE);
         }
     });
+    let tmp_dirpath = args.tmp_dirpath.unwrap_or_else(|| temp_dir().join("denv"));
     Logger::init(args.verbose.log_level_filter(), !args.no_color).unwrap();
     let cfg_filepath = args.cfg_filepath.unwrap_or_else(|| {
         let path = PathBuf::from("denv.yml");
@@ -51,7 +51,7 @@ fn main() {
             PathBuf::from("denv.yaml")
         }
     });
-    let cfg = match Config::load(&cfg_filepath, denv_dirpath) {
+    let cfg = match Config::load(&cfg_filepath, denv_dirpath, tmp_dirpath) {
         Ok(cfg) => cfg,
         Err(LoadingError::FileOpeningFailed(err)) => {
             error!("Unable to open {}: {}", cfg_filepath.display(), err);
