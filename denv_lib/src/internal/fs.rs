@@ -31,8 +31,8 @@ macro_rules! open_file {
 }
 
 macro_rules! software_dirpath {
-    ($root_dirpath:expr, $name:expr, $version:expr) => {
-        $root_dirpath
+    ($denv_dirpath:expr, $name:expr, $version:expr) => {
+        $denv_dirpath
             .join(SOFTWARES_DIRNAME)
             .join($name)
             .join($version)
@@ -53,20 +53,20 @@ pub trait FileSystem {
 
     fn is_installed_software(&self, name: &str, version: &str) -> bool;
 
-    fn root_dirpath(&self) -> &Path;
+    fn denv_dirpath(&self) -> &Path;
 
     fn tmp_dirpath(&self) -> &Path;
 }
 
 pub struct DefaultFileSystem {
-    root_dirpath: PathBuf,
+    denv_dirpath: PathBuf,
     tmp_dirpath: PathBuf,
 }
 
 impl DefaultFileSystem {
-    pub fn new(root_dirpath: PathBuf, tmp_dirpath: PathBuf) -> Self {
+    pub fn new(denv_dirpath: PathBuf, tmp_dirpath: PathBuf) -> Self {
         Self {
-            root_dirpath,
+            denv_dirpath,
             tmp_dirpath,
         }
     }
@@ -74,15 +74,15 @@ impl DefaultFileSystem {
 
 impl FileSystem for DefaultFileSystem {
     fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)> {
-        let dirpath = software_dirpath!(self.root_dirpath, name, version);
+        let dirpath = software_dirpath!(self.denv_dirpath, name, version);
         ensure_dir!(&dirpath)?;
         open_file!(dirpath.join(name))
     }
 
     fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()> {
-        let src_filepath = software_dirpath!(self.root_dirpath, name, version).join(name);
+        let src_filepath = software_dirpath!(self.denv_dirpath, name, version).join(name);
         let dest_dirpath = self
-            .root_dirpath
+            .denv_dirpath
             .join(CONFIGURATIONS_DIRNAME)
             .join(cfg_sha256);
         ensure_dir!(&dest_dirpath)?;
@@ -100,11 +100,11 @@ impl FileSystem for DefaultFileSystem {
     }
 
     fn is_installed_software(&self, name: &str, version: &str) -> bool {
-        software_dirpath!(self.root_dirpath, name, version).is_dir()
+        software_dirpath!(self.denv_dirpath, name, version).is_dir()
     }
 
-    fn root_dirpath(&self) -> &Path {
-        &self.root_dirpath
+    fn denv_dirpath(&self) -> &Path {
+        &self.denv_dirpath
     }
 
     fn tmp_dirpath(&self) -> &Path {
@@ -202,7 +202,7 @@ impl FileSystem for StubFileSystem {
         }
     }
 
-    fn root_dirpath(&self) -> &Path {
+    fn denv_dirpath(&self) -> &Path {
         Path::new("root")
     }
 
@@ -228,10 +228,10 @@ mod test {
 
             #[test]
             fn should_return_fs() {
-                let root_dirpath = tempdir().unwrap().into_path();
+                let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let fs = DefaultFileSystem::new(root_dirpath.clone(), tmp_dirpath.clone());
-                assert_eq!(fs.root_dirpath(), root_dirpath);
+                let fs = DefaultFileSystem::new(denv_dirpath.clone(), tmp_dirpath.clone());
+                assert_eq!(fs.denv_dirpath(), denv_dirpath);
                 assert_eq!(fs.tmp_dirpath(), tmp_dirpath);
             }
         }
@@ -241,10 +241,10 @@ mod test {
 
             #[test]
             fn should_return_err() {
-                let root_dirpath = tempdir().unwrap().into_path().join("root");
+                let denv_dirpath = tempdir().unwrap().into_path().join("root");
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                write(&root_dirpath, "").unwrap();
-                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                write(&denv_dirpath, "").unwrap();
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
                 if fs.create_bin_file("terraform", "1.2.3").is_ok() {
                     panic!("should fail");
                 }
@@ -254,14 +254,14 @@ mod test {
             fn should_return_filepath_and_file() {
                 let name = "terraform";
                 let version = "1.2.3";
-                let root_dirpath = tempdir().unwrap().into_path();
+                let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let expected = root_dirpath
+                let expected = denv_dirpath
                     .join(SOFTWARES_DIRNAME)
                     .join(name)
                     .join(version)
                     .join(name);
-                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
                 let (filepath, mut file) = fs.create_bin_file(name, version).unwrap();
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
@@ -275,15 +275,15 @@ mod test {
             fn should_return_err() {
                 let name = "terraform";
                 let cfg_sha256 = "sha256";
-                let root_dirpath = tempdir().unwrap().into_path();
+                let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let filepath = root_dirpath
+                let filepath = denv_dirpath
                     .join(CONFIGURATIONS_DIRNAME)
                     .join(cfg_sha256)
                     .join(name);
                 create_dir_all(filepath.parent().unwrap()).unwrap();
                 write(filepath, "").unwrap();
-                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
                 if fs.create_bin_symlink(name, "1.2.3", cfg_sha256).is_ok() {
                     panic!("should fail");
                 }
@@ -294,18 +294,18 @@ mod test {
                 let name = "terraform";
                 let version = "1.2.3";
                 let cfg_sha256 = "sha256";
-                let root_dirpath = tempdir().unwrap().into_path();
+                let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let src_filepath = root_dirpath
+                let src_filepath = denv_dirpath
                     .join(SOFTWARES_DIRNAME)
                     .join(name)
                     .join(version)
                     .join(name);
-                let dest_filepath = root_dirpath
+                let dest_filepath = denv_dirpath
                     .join(CONFIGURATIONS_DIRNAME)
                     .join(cfg_sha256)
                     .join(name);
-                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
                 fs.create_bin_symlink(name, version, cfg_sha256).unwrap();
                 assert!(dest_filepath.is_symlink());
                 assert_eq!(read_link(dest_filepath).unwrap(), src_filepath);
@@ -317,10 +317,10 @@ mod test {
 
             #[test]
             fn should_return_err() {
-                let root_dirpath = tempdir().unwrap().into_path();
+                let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path().join("tmp");
                 write(&tmp_dirpath, "").unwrap();
-                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
                 if fs.create_tmp_file("terraform-1.2.3.zip").is_ok() {
                     panic!("should fail");
                 }
@@ -328,11 +328,11 @@ mod test {
 
             #[test]
             fn should_return_file() {
-                let root_dirpath = tempdir().unwrap().into_path();
+                let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let filename = "terraform-1.2.3.zip";
                 let expected = tmp_dirpath.join(filename);
-                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
                 let (filepath, mut file) = fs.create_tmp_file(filename).unwrap();
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
@@ -344,9 +344,9 @@ mod test {
 
             #[test]
             fn should_return_false() {
-                let root_dirpath = tempdir().unwrap().into_path();
+                let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
                 let is_installed = fs.is_installed_software("terraform", "1.2.3");
                 assert!(!is_installed);
             }
@@ -355,16 +355,16 @@ mod test {
             fn should_return_true() {
                 let name = "terraform";
                 let version = "1.2.3";
-                let root_dirpath = tempdir().unwrap().into_path();
+                let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 create_dir_all(
-                    root_dirpath
+                    denv_dirpath
                         .join(SOFTWARES_DIRNAME)
                         .join(name)
                         .join(version),
                 )
                 .unwrap();
-                let fs = DefaultFileSystem::new(root_dirpath, tmp_dirpath);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
                 let is_installed = fs.is_installed_software(name, version);
                 assert!(is_installed);
             }

@@ -27,7 +27,7 @@ struct Args {
         name = "DENV_DIR",
         help = "D-Env directory (default: ~/.denv)"
     )]
-    root_dirpath: Option<PathBuf>,
+    denv_dirpath: Option<PathBuf>,
 
     #[clap(flatten)]
     verbose: Verbosity,
@@ -35,7 +35,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let root_dirpath = args.root_dirpath.unwrap_or_else(|| match home_dir() {
+    let denv_dirpath = args.denv_dirpath.unwrap_or_else(|| match home_dir() {
         Some(home_dirpath) => home_dirpath.join(".denv"),
         None => {
             error!("Unable to get user home directory");
@@ -51,7 +51,7 @@ fn main() {
             PathBuf::from("denv.yaml")
         }
     });
-    let cfg = match Config::load(&cfg_filepath, root_dirpath) {
+    let cfg = match Config::load(&cfg_filepath, denv_dirpath) {
         Ok(cfg) => cfg,
         Err(LoadingError::FileOpeningFailed(err)) => {
             error!("Unable to open {}: {}", cfg_filepath.display(), err);

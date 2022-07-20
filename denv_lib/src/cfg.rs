@@ -46,7 +46,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(filepath: &Path, root_dirpath: PathBuf) -> Result<Self, LoadingError> {
+    pub fn load(filepath: &Path, denv_dirpath: PathBuf) -> Result<Self, LoadingError> {
         debug!("Loading configuration from {}", filepath.display());
         let cfg = read_to_string(filepath).map_err(LoadingError::FileOpeningFailed)?;
         let cfg =
@@ -66,7 +66,7 @@ impl Config {
         }
         let cfg = Self {
             softwares,
-            fs: Box::new(DefaultFileSystem::new(root_dirpath, temp_dir())),
+            fs: Box::new(DefaultFileSystem::new(denv_dirpath, temp_dir())),
             downloader: Box::new(DefaultDownloader),
             unzipper: Box::new(DefaultUnzipper),
         };
@@ -192,11 +192,11 @@ mod test {
             #[test]
             fn should_return_config() {
                 let softwares: Vec<Box<dyn Software>> = vec![Box::new(Terraform("1.2.3".into()))];
-                let root_dirpath = PathBuf::from(".denv");
+                let denv_dirpath = PathBuf::from(".denv");
                 let cfg =
-                    Config::load(Path::new("../examples/denv.yml"), root_dirpath.clone()).unwrap();
+                    Config::load(Path::new("../examples/denv.yml"), denv_dirpath.clone()).unwrap();
                 assert_eq!(cfg.softwares(), softwares);
-                assert_eq!(cfg.fs.root_dirpath(), root_dirpath);
+                assert_eq!(cfg.fs.denv_dirpath(), denv_dirpath);
             }
         }
 
