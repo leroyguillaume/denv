@@ -231,8 +231,8 @@ mod test {
                     StubDownloader::new(),
                     StubUnzipper::new(),
                 );
-                let software1 = DummySoftware("1.2.3");
-                let software2 = DummySoftware("1.2.4");
+                let software1 = StubSoftware::new("stub", "1.2.3");
+                let software2 = StubSoftware::new("stub", "1.2.4");
                 let mut hasher = Sha256::new();
                 hasher.update(software1.name());
                 hasher.update(software1.version());
@@ -254,8 +254,8 @@ mod test {
                     StubDownloader::new(),
                     StubUnzipper::new(),
                 );
-                let software1 = DummySoftware("1.2.3");
-                let software2 = DummySoftware("1.2.4");
+                let software1 = StubSoftware::new("stub", "1.2.3");
+                let software2 = StubSoftware::new("stub", "1.2.4");
                 cfg.softwares = vec![Box::new(software1), Box::new(software2)];
                 assert_eq!(cfg.softwares(), cfg.softwares);
             }

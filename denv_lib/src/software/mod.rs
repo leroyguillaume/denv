@@ -98,21 +98,59 @@ impl PartialEq for dyn Software {
 }
 
 #[cfg(test)]
-#[derive(Clone, Copy, Debug)]
-pub struct DummySoftware(pub &'static str);
+type InstallFn = dyn Fn(&Config) -> Result<(), InstallError>;
 
 #[cfg(test)]
-impl Software for DummySoftware {
-    fn install(&self, _cfg: &Config) -> Result<(), InstallError> {
-        Ok(())
+pub struct StubSoftware {
+    name: &'static str,
+    version: &'static str,
+    install_fn: Option<Box<InstallFn>>,
+}
+
+#[cfg(test)]
+impl StubSoftware {
+    pub fn new(name: &'static str, version: &'static str) -> Self {
+        Self {
+            name,
+            version,
+            install_fn: None,
+        }
+    }
+
+    pub fn with_install_fn<F: Fn(&Config) -> Result<(), InstallError> + 'static>(
+        mut self,
+        install_fn: F,
+    ) -> Self {
+        self.install_fn = Some(Box::new(install_fn));
+        self
+    }
+}
+
+#[cfg(test)]
+impl Debug for StubSoftware {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StubSoftware")
+            .field("name", &self.name)
+            .field("version", &self.version)
+            .finish()
+    }
+}
+
+#[cfg(test)]
+impl Software for StubSoftware {
+    fn install(&self, cfg: &Config) -> Result<(), InstallError> {
+        match &self.install_fn {
+            Some(install_fn) => install_fn(cfg),
+            None => unimplemented!(),
+        }
     }
 
     fn name(&self) -> &'static str {
-        "dummy"
+        self.name
     }
 
     fn version(&self) -> &str {
-        self.0
+        self.version
     }
 }
 
@@ -219,11 +257,13 @@ mod test {
 
             #[test]
             fn should_return_err() {
-                let software = DummySoftware("1.2.3");
+                let software_name = "stub";
+                let software_version = "1.2.3";
+                let software = StubSoftware::new(software_name, software_version);
                 let fs = StubFileSystem::new().with_create_bin_symlink_fn(
                     move |name, version, cfg_sha256| {
-                        assert_eq!(name, software.name());
-                        assert_eq!(version, software.version());
+                        assert_eq!(name, software_name);
+                        assert_eq!(version, software_version);
                         assert_eq!(
                             cfg_sha256,
                             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -242,11 +282,13 @@ mod test {
 
             #[test]
             fn should_create_symlink() {
-                let software = DummySoftware("1.2.3");
+                let software_name = "stub";
+                let software_version = "1.2.3";
+                let software = StubSoftware::new(software_name, software_version);
                 let fs = StubFileSystem::new().with_create_bin_symlink_fn(
                     move |name, version, cfg_sha256| {
-                        assert_eq!(name, software.name());
-                        assert_eq!(version, software.version());
+                        assert_eq!(name, software_name);
+                        assert_eq!(version, software_version);
                         assert_eq!(
                             cfg_sha256,
                             "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -264,15 +306,15 @@ mod test {
 
             #[test]
             fn should_return_false() {
-                let software1: Box<dyn Software> = Box::new(DummySoftware("1.2.3"));
-                let software2: Box<dyn Software> = Box::new(DummySoftware("1.2.4"));
+                let software1: Box<dyn Software> = Box::new(StubSoftware::new("stub", "1.2.3"));
+                let software2: Box<dyn Software> = Box::new(StubSoftware::new("stub", "1.2.4"));
                 assert!(software1 != software2);
             }
 
             #[test]
             fn should_return_true() {
-                let software1: Box<dyn Software> = Box::new(DummySoftware("1.2.3"));
-                let software2: Box<dyn Software> = Box::new(DummySoftware("1.2.3"));
+                let software1: Box<dyn Software> = Box::new(StubSoftware::new("stub", "1.2.3"));
+                let software2: Box<dyn Software> = Box::new(StubSoftware::new("stub", "1.2.3"));
                 assert!(software1 == software2);
             }
         }
@@ -284,11 +326,13 @@ mod test {
                 ($ident:ident, $expected:expr) => {
                     #[test]
                     fn $ident() {
-                        let software = DummySoftware("1.2.3");
+                        let software_name = "stub";
+                        let software_version = "1.2.3";
+                        let software = StubSoftware::new(software_name, software_version);
                         let fs = StubFileSystem::new().with_is_installed_software_fn(
                             move |name, version| {
-                                assert_eq!(name, software.name());
-                                assert_eq!(version, software.version());
+                                assert_eq!(name, software_name);
+                                assert_eq!(version, software_version);
                                 $expected
                             },
                         );
@@ -307,7 +351,7 @@ mod test {
 
             #[test]
             fn should_return_string() {
-                let software: Box<dyn Software> = Box::new(DummySoftware("1.2.3"));
+                let software: Box<dyn Software> = Box::new(StubSoftware::new("stub", "1.2.3"));
                 let expected = format!("{} v{}", software.name(), software.version());
                 assert_eq!(software.to_string(), expected);
             }
