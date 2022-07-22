@@ -1,7 +1,7 @@
 use crate::{error::*, software::*};
 use log::{debug, trace};
 use std::{
-    fs::{create_dir_all, File, OpenOptions},
+    fs::{create_dir_all, remove_file, File, OpenOptions},
     os::unix::fs::symlink,
     path::{Path, PathBuf},
 };
@@ -98,12 +98,18 @@ impl FileSystem for DefaultFileSystem {
         let dest_dirpath = env_dirpath!(self.denv_dirpath, env_id);
         ensure_dir!(&dest_dirpath)?;
         let dest_filepath = dest_dirpath.join(software.name());
+        if dest_filepath.is_symlink() {
+            trace!("Deleting {}", dest_filepath.display());
+            remove_file(&dest_filepath)
+                .map_err(|err| FileSystemError::new(dest_filepath.clone(), err))?;
+        }
         debug!(
             "Creating symlink from {} to {}",
             src_filepath.display(),
             dest_dirpath.display()
         );
-        symlink(src_filepath, dest_filepath).map_err(|err| FileSystemError::new(dest_dirpath, err))
+        symlink(src_filepath, &dest_filepath)
+            .map_err(|err| FileSystemError::new(dest_filepath, err))
     }
 
     fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)> {
@@ -316,6 +322,23 @@ mod test {
                 let dest_dirpath = env_dirpath!(denv_dirpath, env_id);
                 create_dir_all(&dest_dirpath).unwrap();
                 let dest_filepath = dest_dirpath.join(software.name());
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
+                fs.create_bin_symlink(env_id, &software).unwrap();
+                assert!(dest_filepath.is_symlink());
+                assert_eq!(read_link(dest_filepath).unwrap(), src_filepath);
+            }
+
+            #[test]
+            fn should_create_symlink_if_it_already_exists() {
+                let software = StubSoftware::new("software", "1.2.3");
+                let env_id = "env_id";
+                let denv_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
+                let src_filepath = software_bin_filepath!(denv_dirpath, software);
+                let dest_dirpath = env_dirpath!(denv_dirpath, env_id);
+                create_dir_all(&dest_dirpath).unwrap();
+                let dest_filepath = dest_dirpath.join(software.name());
+                symlink(&src_filepath, &dest_filepath).unwrap();
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
                 fs.create_bin_symlink(env_id, &software).unwrap();
                 assert!(dest_filepath.is_symlink());
