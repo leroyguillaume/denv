@@ -1,5 +1,5 @@
 use crate::{error::*, software::*};
-use log::debug;
+use log::{debug, trace};
 use std::{
     fs::{create_dir_all, File, OpenOptions},
     os::unix::fs::symlink,
@@ -9,7 +9,7 @@ use std::{
 macro_rules! ensure_dir {
     ($path:expr) => {
         if $path.is_dir() {
-            debug!("Directory {} already exists", $path.display());
+            trace!("Directory {} already exists", $path.display());
             Ok(())
         } else {
             debug!("Creating directory {}", $path.display());
@@ -28,6 +28,9 @@ macro_rules! env_dirpath {
 
 macro_rules! open_file {
     ($path:expr) => {{
+        if let Some(parent_path) = $path.parent() {
+            ensure_dir!(parent_path.to_path_buf())?;
+        }
         OpenOptions::new()
             .create(true)
             .write(true)
@@ -87,8 +90,6 @@ impl DefaultFileSystem {
 
 impl FileSystem for DefaultFileSystem {
     fn create_bin_file(&self, software: &dyn Software) -> Result<(PathBuf, File)> {
-        let dirpath = software_dirpath!(self.denv_dirpath, software);
-        ensure_dir!(&dirpath)?;
         open_file!(software_bin_filepath!(self.denv_dirpath, software))
     }
 
@@ -225,7 +226,7 @@ impl FileSystem for StubFileSystem {
 mod test {
     use super::*;
     use std::{
-        fs::{read_link, write},
+        fs::{read_link, remove_dir_all, write},
         io::Write,
     };
     use tempfile::tempdir;
@@ -272,6 +273,19 @@ mod test {
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
             }
+
+            #[test]
+            fn should_return_filepath_and_file_if_dir_does_not_exit() {
+                let software = StubSoftware::new("software", "1.2.3");
+                let denv_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
+                remove_dir_all(&denv_dirpath).unwrap();
+                let expected = software_bin_filepath!(denv_dirpath, software);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
+                let (filepath, mut file) = fs.create_bin_file(&software).unwrap();
+                assert_eq!(filepath, expected);
+                write!(file, "test").unwrap();
+            }
         }
 
         mod create_bin_symlink {
@@ -294,6 +308,22 @@ mod test {
 
             #[test]
             fn should_create_symlink() {
+                let software = StubSoftware::new("software", "1.2.3");
+                let env_id = "env_id";
+                let denv_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
+                let src_filepath = software_bin_filepath!(denv_dirpath, software);
+                let dest_dirpath = env_dirpath!(denv_dirpath, env_id);
+                create_dir_all(&dest_dirpath).unwrap();
+                let dest_filepath = dest_dirpath.join(software.name());
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
+                fs.create_bin_symlink(env_id, &software).unwrap();
+                assert!(dest_filepath.is_symlink());
+                assert_eq!(read_link(dest_filepath).unwrap(), src_filepath);
+            }
+
+            #[test]
+            fn should_create_symlink_if_dir_does_not_exit() {
                 let software = StubSoftware::new("software", "1.2.3");
                 let env_id = "env_id";
                 let denv_dirpath = tempdir().unwrap().into_path();
@@ -325,6 +355,19 @@ mod test {
             fn should_return_file() {
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
+                let filename = "terraform-1.2.3.zip";
+                let expected = tmp_dirpath.join(filename);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
+                let (filepath, mut file) = fs.create_tmp_file(filename).unwrap();
+                assert_eq!(filepath, expected);
+                write!(file, "test").unwrap();
+            }
+
+            #[test]
+            fn should_return_file_if_dir_does_not_exist() {
+                let denv_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
+                remove_dir_all(&tmp_dirpath).unwrap();
                 let filename = "terraform-1.2.3.zip";
                 let expected = tmp_dirpath.join(filename);
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
