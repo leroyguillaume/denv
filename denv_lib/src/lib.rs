@@ -4,7 +4,7 @@ mod internal;
 pub mod software;
 
 use crate::{cfg::*, error::*};
-use log::debug;
+use log::{debug, info};
 use std::path::PathBuf;
 
 macro_rules! env_id {
@@ -43,8 +43,10 @@ impl Environment {
                 errs.push(EnvironmentLoadError::SymlinkCreationFailed(
                     software.to_string(),
                     err,
-                ))
+                ));
+                continue;
             }
+            info!("{}", software);
         }
         if errs.is_empty() {
             Ok(())
