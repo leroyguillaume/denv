@@ -2,11 +2,18 @@ mod logger;
 
 use clap::Parser;
 use clap_verbosity_flag::Verbosity;
-use denv_lib::cfg::{Config, LoadingError};
+use denv_lib::{
+    cfg::{Config, LoadingError},
+    *,
+};
 use home::home_dir;
-use log::{debug, error, info};
+use log::error;
 use logger::Logger;
-use std::{env::temp_dir, path::PathBuf, process::exit};
+use std::{
+    env::{current_dir, temp_dir},
+    path::PathBuf,
+    process::exit,
+};
 
 #[derive(Parser)]
 #[clap(name = "D-Env", author, version, about)]
@@ -34,6 +41,13 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+    let cur_dirpath = match current_dir() {
+        Ok(cur_dirpath) => cur_dirpath,
+        Err(err) => {
+            error!("Unable to get current working directory: {}", err);
+            exit(exitcode::UNAVAILABLE);
+        }
+    };
     let denv_dirpath = args.denv_dirpath.unwrap_or_else(|| match home_dir() {
         Some(home_dirpath) => home_dirpath.join(".denv"),
         None => {
@@ -69,18 +83,14 @@ fn main() {
             exit(exitcode::CONFIG);
         }
     };
-    for software in cfg.softwares() {
-        if software.is_installed(&cfg) {
-            debug!("{} is already installed", software);
-        } else {
-            match software.install(&cfg) {
-                Ok(_) => {}
-                Err(err) => error!("Unable to install {}: {}", software, err),
-            };
-        }
-        match software.add_to_path(&cfg) {
-            Ok(()) => info!("{}", software),
-            Err(err) => error!("Unable to add {} to path: {}", software, err),
+    let denv = DEnv::new(cur_dirpath);
+    match denv.run(&cfg) {
+        Ok(()) => exit(exitcode::OK),
+        Err(errs) => {
+            for err in errs {
+                error!("{}", err);
+            }
+            exit(exitcode::SOFTWARE);
         }
     }
 }
