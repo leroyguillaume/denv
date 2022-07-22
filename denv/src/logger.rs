@@ -7,11 +7,11 @@ use std::{
 };
 
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
-const TRACE_COLOR: &str = "\x1b[1;30m";
-const DEBUG_COLOR: &str = "\x1b[1;32m";
-const INFO_COLOR: &str = "\x1b[1;34m";
-const WARN_COLOR: &str = "\x1b[1;33m";
-const ERROR_COLOR: &str = "\x1b[1;31m";
+const TRACE_COLOR: &str = "\x1b[0;30m";
+const DEBUG_COLOR: &str = "\x1b[0;34m";
+const INFO_COLOR: &str = "\x1b[0;32m";
+const WARN_COLOR: &str = "\x1b[0;33m";
+const ERROR_COLOR: &str = "\x1b[0;31m";
 
 pub struct Logger<W: Write + Sync + Send> {
     lvl: LevelFilter,
