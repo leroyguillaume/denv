@@ -1,4 +1,4 @@
-use crate::error::*;
+use crate::{error::*, software::*};
 use log::{debug, trace};
 use std::{
     fs::{create_dir_all, File, OpenOptions},
@@ -30,12 +30,18 @@ macro_rules! open_file {
     }};
 }
 
+macro_rules! software_bin_filepath {
+    ($dirpath:expr, $software:expr) => {
+        software_dirpath!($dirpath, $software).join($software.name())
+    };
+}
+
 macro_rules! software_dirpath {
-    ($denv_dirpath:expr, $name:expr, $version:expr) => {
+    ($denv_dirpath:expr, $software:expr) => {
         $denv_dirpath
             .join(SOFTWARES_DIRNAME)
-            .join($name)
-            .join($version)
+            .join($software.name())
+            .join($software.version())
     };
 }
 
@@ -45,15 +51,15 @@ const CONFIGURATIONS_DIRNAME: &str = "configurations";
 pub type Result<T> = std::result::Result<T, FileSystemError>;
 
 pub trait FileSystem {
-    fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)>;
+    fn create_bin_file(&self, software: &dyn Software) -> Result<(PathBuf, File)>;
 
-    fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()>;
+    fn create_bin_symlink(&self, software: &dyn Software, cfg_sha256: &str) -> Result<()>;
 
     fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)>;
 
-    fn is_installed_software(&self, name: &str, version: &str) -> bool;
-
     fn denv_dirpath(&self) -> &Path;
+
+    fn is_installed_software(&self, software: &dyn Software) -> bool;
 
     fn tmp_dirpath(&self) -> &Path;
 }
@@ -73,20 +79,20 @@ impl DefaultFileSystem {
 }
 
 impl FileSystem for DefaultFileSystem {
-    fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)> {
-        let dirpath = software_dirpath!(self.denv_dirpath, name, version);
+    fn create_bin_file(&self, software: &dyn Software) -> Result<(PathBuf, File)> {
+        let dirpath = software_dirpath!(self.denv_dirpath, software);
         ensure_dir!(&dirpath)?;
-        open_file!(dirpath.join(name))
+        open_file!(software_bin_filepath!(self.denv_dirpath, software))
     }
 
-    fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()> {
-        let src_filepath = software_dirpath!(self.denv_dirpath, name, version).join(name);
+    fn create_bin_symlink(&self, software: &dyn Software, cfg_sha256: &str) -> Result<()> {
+        let src_filepath = software_bin_filepath!(self.denv_dirpath, software);
         let dest_dirpath = self
             .denv_dirpath
             .join(CONFIGURATIONS_DIRNAME)
             .join(cfg_sha256);
         ensure_dir!(&dest_dirpath)?;
-        let dest_filepath = dest_dirpath.join(name);
+        let dest_filepath = dest_dirpath.join(software.name());
         debug!(
             "Creating symlink from {} to {}",
             src_filepath.display(),
@@ -99,12 +105,12 @@ impl FileSystem for DefaultFileSystem {
         open_file!(self.tmp_dirpath.join(filename))
     }
 
-    fn is_installed_software(&self, name: &str, version: &str) -> bool {
-        software_dirpath!(self.denv_dirpath, name, version).is_dir()
-    }
-
     fn denv_dirpath(&self) -> &Path {
         &self.denv_dirpath
+    }
+
+    fn is_installed_software(&self, software: &dyn Software) -> bool {
+        software_dirpath!(self.denv_dirpath, software).is_dir()
     }
 
     fn tmp_dirpath(&self) -> &Path {
@@ -113,16 +119,16 @@ impl FileSystem for DefaultFileSystem {
 }
 
 #[cfg(test)]
-type CreateBinFileFn = dyn Fn(&str, &str) -> Result<(PathBuf, File)>;
+type CreateBinFileFn = dyn Fn(&dyn Software) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
-type CreateBinSymlinkFn = dyn Fn(&str, &str, &str) -> Result<()>;
+type CreateBinSymlinkFn = dyn Fn(&dyn Software, &str) -> Result<()>;
 
 #[cfg(test)]
 type CreateTmpFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
-type IsInstalledSoftwareFn = dyn Fn(&str, &str) -> bool;
+type IsInstalledSoftwareFn = dyn Fn(&dyn Software) -> bool;
 
 #[cfg(test)]
 #[derive(Default)]
@@ -139,7 +145,7 @@ impl StubFileSystem {
         Self::default()
     }
 
-    pub fn with_create_bin_file_fn<F: Fn(&str, &str) -> Result<(PathBuf, File)> + 'static>(
+    pub fn with_create_bin_file_fn<F: Fn(&dyn Software) -> Result<(PathBuf, File)> + 'static>(
         mut self,
         create_bin_file_fn: F,
     ) -> Self {
@@ -147,7 +153,7 @@ impl StubFileSystem {
         self
     }
 
-    pub fn with_create_bin_symlink_fn<F: Fn(&str, &str, &str) -> Result<()> + 'static>(
+    pub fn with_create_bin_symlink_fn<F: Fn(&dyn Software, &str) -> Result<()> + 'static>(
         mut self,
         create_bin_symlink_fn: F,
     ) -> Self {
@@ -163,7 +169,7 @@ impl StubFileSystem {
         self
     }
 
-    pub fn with_is_installed_software_fn<F: Fn(&str, &str) -> bool + 'static>(
+    pub fn with_is_installed_software_fn<F: Fn(&dyn Software) -> bool + 'static>(
         mut self,
         is_installed_software_fn: F,
     ) -> Self {
@@ -174,16 +180,16 @@ impl StubFileSystem {
 
 #[cfg(test)]
 impl FileSystem for StubFileSystem {
-    fn create_bin_file(&self, name: &str, version: &str) -> Result<(PathBuf, File)> {
+    fn create_bin_file(&self, software: &dyn Software) -> Result<(PathBuf, File)> {
         match &self.create_bin_file_fn {
-            Some(create_bin_file_fn) => create_bin_file_fn(name, version),
+            Some(create_bin_file_fn) => create_bin_file_fn(software),
             None => unimplemented!(),
         }
     }
 
-    fn create_bin_symlink(&self, name: &str, version: &str, cfg_sha256: &str) -> Result<()> {
+    fn create_bin_symlink(&self, software: &dyn Software, cfg_sha256: &str) -> Result<()> {
         match &self.create_bin_symlink_fn {
-            Some(create_bin_symlink_fn) => create_bin_symlink_fn(name, version, cfg_sha256),
+            Some(create_bin_symlink_fn) => create_bin_symlink_fn(software, cfg_sha256),
             None => unimplemented!(),
         }
     }
@@ -195,15 +201,15 @@ impl FileSystem for StubFileSystem {
         }
     }
 
-    fn is_installed_software(&self, name: &str, version: &str) -> bool {
-        match &self.is_installed_software_fn {
-            Some(is_installed_software_fn) => is_installed_software_fn(name, version),
-            None => unimplemented!(),
-        }
-    }
-
     fn denv_dirpath(&self) -> &Path {
         Path::new("root")
+    }
+
+    fn is_installed_software(&self, software: &dyn Software) -> bool {
+        match &self.is_installed_software_fn {
+            Some(is_installed_software_fn) => is_installed_software_fn(software),
+            None => unimplemented!(),
+        }
     }
 
     fn tmp_dirpath(&self) -> &Path {
@@ -241,28 +247,24 @@ mod test {
 
             #[test]
             fn should_return_err() {
+                let software = StubSoftware::new("software", "1.2.3");
                 let denv_dirpath = tempdir().unwrap().into_path().join("root");
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 write(&denv_dirpath, "").unwrap();
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                if fs.create_bin_file("terraform", "1.2.3").is_ok() {
+                if fs.create_bin_file(&software).is_ok() {
                     panic!("should fail");
                 }
             }
 
             #[test]
             fn should_return_filepath_and_file() {
-                let name = "terraform";
-                let version = "1.2.3";
+                let software = StubSoftware::new("software", "1.2.3");
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let expected = denv_dirpath
-                    .join(SOFTWARES_DIRNAME)
-                    .join(name)
-                    .join(version)
-                    .join(name);
+                let expected = software_bin_filepath!(denv_dirpath, software);
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                let (filepath, mut file) = fs.create_bin_file(name, version).unwrap();
+                let (filepath, mut file) = fs.create_bin_file(&software).unwrap();
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
             }
@@ -273,40 +275,35 @@ mod test {
 
             #[test]
             fn should_return_err() {
-                let name = "terraform";
+                let software = StubSoftware::new("software", "1.2.3");
                 let cfg_sha256 = "sha256";
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let filepath = denv_dirpath
                     .join(CONFIGURATIONS_DIRNAME)
                     .join(cfg_sha256)
-                    .join(name);
+                    .join(software.name());
                 create_dir_all(filepath.parent().unwrap()).unwrap();
                 write(filepath, "").unwrap();
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                if fs.create_bin_symlink(name, "1.2.3", cfg_sha256).is_ok() {
+                if fs.create_bin_symlink(&software, cfg_sha256).is_ok() {
                     panic!("should fail");
                 }
             }
 
             #[test]
             fn should_create_symlink() {
-                let name = "terraform";
-                let version = "1.2.3";
+                let software = StubSoftware::new("software", "1.2.3");
                 let cfg_sha256 = "sha256";
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let src_filepath = denv_dirpath
-                    .join(SOFTWARES_DIRNAME)
-                    .join(name)
-                    .join(version)
-                    .join(name);
+                let src_filepath = software_bin_filepath!(denv_dirpath, software);
                 let dest_filepath = denv_dirpath
                     .join(CONFIGURATIONS_DIRNAME)
                     .join(cfg_sha256)
-                    .join(name);
+                    .join(software.name());
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                fs.create_bin_symlink(name, version, cfg_sha256).unwrap();
+                fs.create_bin_symlink(&software, cfg_sha256).unwrap();
                 assert!(dest_filepath.is_symlink());
                 assert_eq!(read_link(dest_filepath).unwrap(), src_filepath);
             }
@@ -344,28 +341,22 @@ mod test {
 
             #[test]
             fn should_return_false() {
+                let software = StubSoftware::new("software", "1.2.3");
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                let is_installed = fs.is_installed_software("terraform", "1.2.3");
+                let is_installed = fs.is_installed_software(&software);
                 assert!(!is_installed);
             }
 
             #[test]
             fn should_return_true() {
-                let name = "terraform";
-                let version = "1.2.3";
+                let software = StubSoftware::new("software", "1.2.3");
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                create_dir_all(
-                    denv_dirpath
-                        .join(SOFTWARES_DIRNAME)
-                        .join(name)
-                        .join(version),
-                )
-                .unwrap();
+                create_dir_all(software_dirpath!(denv_dirpath, software)).unwrap();
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                let is_installed = fs.is_installed_software(name, version);
+                let is_installed = fs.is_installed_software(&software);
                 assert!(is_installed);
             }
         }

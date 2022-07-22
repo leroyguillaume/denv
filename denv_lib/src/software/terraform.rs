@@ -57,7 +57,7 @@ impl Software for Terraform {
             .map_err(InstallError::DownloadFailed)?;
         let (_, bin_file) = cfg
             .fs
-            .create_bin_file(SOFTWARE_NAME, &self.0)
+            .create_bin_file(self)
             .map_err(InstallError::FileSystemWritingFailed)?;
         let mut file_buf = BufWriter::new(bin_file);
         cfg.unzipper
@@ -173,9 +173,9 @@ mod test {
                                     ))
                                 }
                             })
-                            .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, SOFTWARE_NAME);
-                                assert_eq!(version, expected_version);
+                            .with_create_bin_file_fn(move |software| {
+                                assert_eq!(software.name(), SOFTWARE_NAME);
+                                assert_eq!(software.version(), expected_version);
                                 Err(FileSystemError::new(PathBuf::from("/error"), io::Error::from(io::ErrorKind::PermissionDenied)))
                             });
                         let downloader = StubDownloader::new()
@@ -216,9 +216,9 @@ mod test {
                                     ))
                                 }
                             })
-                            .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, SOFTWARE_NAME);
-                                assert_eq!(version, expected_version);
+                            .with_create_bin_file_fn(move |software| {
+                                assert_eq!(software.name(), SOFTWARE_NAME);
+                                assert_eq!(software.version(), expected_version);
                                 Ok((
                                     bin_filepath.clone(),
                                     File::create(&bin_filepath).map_err(|err| FileSystemError::new(bin_filepath.clone(), err))?
@@ -275,9 +275,9 @@ mod test {
                                     ))
                                 }
                             })
-                            .with_create_bin_file_fn(move |name, version| {
-                                assert_eq!(name, SOFTWARE_NAME);
-                                assert_eq!(version, expected_version);
+                            .with_create_bin_file_fn(move |software| {
+                                assert_eq!(software.name(), SOFTWARE_NAME);
+                                assert_eq!(software.version(), expected_version);
                                 Ok((
                                     bin_filepath.clone(),
                                     File::create(&bin_filepath).map_err(|err| FileSystemError::new(bin_filepath.clone(), err))?

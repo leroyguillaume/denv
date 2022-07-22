@@ -29,16 +29,14 @@ impl DEnv {
         let mut errs: Vec<RunError> = vec![];
         let dir_id = dir_id!(self.0);
         for software in cfg.softwares() {
-            if software.is_installed(cfg) {
+            let software = software.as_ref();
+            if cfg.fs.is_installed_software(software) {
                 debug!("{} is already installed", software);
             } else if let Err(err) = software.install(cfg) {
                 errs.push(RunError::InstallFailed(software.to_string(), err));
                 continue;
             }
-            if let Err(err) =
-                cfg.fs
-                    .create_bin_symlink(software.name(), software.version(), &dir_id)
-            {
+            if let Err(err) = cfg.fs.create_bin_symlink(software, &dir_id) {
                 errs.push(RunError::SymlinkCreationFailed(software.to_string(), err))
             }
         }
@@ -93,20 +91,21 @@ mod test {
                 let software2: Box<dyn Software> = Box::new(software2);
                 let software2_str = software2.to_string();
                 let fs = StubFileSystem::new()
-                    .with_create_bin_symlink_fn(move |name, version, _| {
-                        assert_eq!(name, software2_name);
-                        assert_eq!(version, software2_version);
+                    .with_create_bin_symlink_fn(move |software, _| {
+                        assert_eq!(software.name(), software2_name);
+                        assert_eq!(software.version(), software2_version);
                         Err(FileSystemError::new(
                             PathBuf::from("/error"),
                             io::Error::from(io::ErrorKind::PermissionDenied),
                         ))
                     })
-                    .with_is_installed_software_fn(move |name, version| {
+                    .with_is_installed_software_fn(move |software| {
+                        let name = software.name();
                         if name == software1_name {
-                            assert_eq!(version, software1_version);
+                            assert_eq!(software.version(), software1_version);
                             false
                         } else if name == software2_name {
-                            assert_eq!(version, software2_version);
+                            assert_eq!(software.version(), software2_version);
                             true
                         } else {
                             panic!()
@@ -145,22 +144,24 @@ mod test {
                     .with_install_fn(|_| Ok(()));
                 let software2: Box<dyn Software> = Box::new(software2);
                 let fs = StubFileSystem::new()
-                    .with_create_bin_symlink_fn(move |name, version, _| {
+                    .with_create_bin_symlink_fn(move |software, _| {
+                        let name = software.name();
                         if name == software1_name {
-                            assert_eq!(version, software1_version);
+                            assert_eq!(software.version(), software1_version);
                         } else if name == software2_name {
-                            assert_eq!(version, software2_version);
+                            assert_eq!(software.version(), software2_version);
                         } else {
                             panic!()
                         }
                         Ok(())
                     })
-                    .with_is_installed_software_fn(move |name, version| {
+                    .with_is_installed_software_fn(move |software| {
+                        let name = software.name();
                         if name == software1_name {
-                            assert_eq!(version, software1_version);
+                            assert_eq!(software.version(), software1_version);
                             false
                         } else if name == software2_name {
-                            assert_eq!(version, software2_version);
+                            assert_eq!(software.version(), software2_version);
                             true
                         } else {
                             panic!()
