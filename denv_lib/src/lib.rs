@@ -36,7 +36,7 @@ impl DEnv {
                 errs.push(RunError::InstallFailed(software.to_string(), err));
                 continue;
             }
-            if let Err(err) = cfg.fs.create_bin_symlink(software, &dir_id) {
+            if let Err(err) = cfg.fs.create_bin_symlink(&dir_id, software) {
                 errs.push(RunError::SymlinkCreationFailed(software.to_string(), err))
             }
         }
@@ -73,6 +73,7 @@ mod test {
 
             #[test]
             fn should_return_list_of_errs() {
+                let dirpath = PathBuf::from("/denv");
                 let software1_name = "software1";
                 let software1_version = "3.2.1";
                 let software1 = StubSoftware::new(software1_name, software1_version)
@@ -91,7 +92,8 @@ mod test {
                 let software2: Box<dyn Software> = Box::new(software2);
                 let software2_str = software2.to_string();
                 let fs = StubFileSystem::new()
-                    .with_create_bin_symlink_fn(move |software, _| {
+                    .with_create_bin_symlink_fn(move |dir_id, software| {
+                        assert_eq!(dir_id, dir_id!(dirpath));
                         assert_eq!(software.name(), software2_name);
                         assert_eq!(software.version(), software2_version);
                         Err(FileSystemError::new(
@@ -133,6 +135,7 @@ mod test {
 
             #[test]
             fn should_return_ok() {
+                let dirpath = PathBuf::from("/denv");
                 let software1_name = "software1";
                 let software1_version = "3.2.1";
                 let software1 = StubSoftware::new(software1_name, software1_version)
@@ -144,8 +147,9 @@ mod test {
                     .with_install_fn(|_| Ok(()));
                 let software2: Box<dyn Software> = Box::new(software2);
                 let fs = StubFileSystem::new()
-                    .with_create_bin_symlink_fn(move |software, _| {
+                    .with_create_bin_symlink_fn(move |dir_id, software| {
                         let name = software.name();
+                        assert_eq!(dir_id, dir_id!(dirpath));
                         if name == software1_name {
                             assert_eq!(software.version(), software1_version);
                         } else if name == software2_name {

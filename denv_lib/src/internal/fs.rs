@@ -6,6 +6,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
+macro_rules! cfg_dirpath {
+    ($denv_dirpath:expr, $dir_id:expr) => {
+        $denv_dirpath
+            .join(CONFIGURATIONS_DIRNAME)
+            .join(Path::new($dir_id))
+    };
+}
+
 macro_rules! ensure_dir {
     ($path:expr) => {
         if $path.is_dir() {
@@ -31,8 +39,8 @@ macro_rules! open_file {
 }
 
 macro_rules! software_bin_filepath {
-    ($dirpath:expr, $software:expr) => {
-        software_dirpath!($dirpath, $software).join($software.name())
+    ($denv_dirpath:expr, $software:expr) => {
+        software_dirpath!($denv_dirpath, $software).join($software.name())
     };
 }
 
@@ -53,7 +61,7 @@ pub type Result<T> = std::result::Result<T, FileSystemError>;
 pub trait FileSystem {
     fn create_bin_file(&self, software: &dyn Software) -> Result<(PathBuf, File)>;
 
-    fn create_bin_symlink(&self, software: &dyn Software, cfg_sha256: &str) -> Result<()>;
+    fn create_bin_symlink(&self, dir_id: &str, software: &dyn Software) -> Result<()>;
 
     fn create_tmp_file(&self, filename: &str) -> Result<(PathBuf, File)>;
 
@@ -85,12 +93,9 @@ impl FileSystem for DefaultFileSystem {
         open_file!(software_bin_filepath!(self.denv_dirpath, software))
     }
 
-    fn create_bin_symlink(&self, software: &dyn Software, cfg_sha256: &str) -> Result<()> {
+    fn create_bin_symlink(&self, dir_id: &str, software: &dyn Software) -> Result<()> {
         let src_filepath = software_bin_filepath!(self.denv_dirpath, software);
-        let dest_dirpath = self
-            .denv_dirpath
-            .join(CONFIGURATIONS_DIRNAME)
-            .join(cfg_sha256);
+        let dest_dirpath = cfg_dirpath!(self.denv_dirpath, dir_id);
         ensure_dir!(&dest_dirpath)?;
         let dest_filepath = dest_dirpath.join(software.name());
         debug!(
@@ -122,7 +127,7 @@ impl FileSystem for DefaultFileSystem {
 type CreateBinFileFn = dyn Fn(&dyn Software) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
-type CreateBinSymlinkFn = dyn Fn(&dyn Software, &str) -> Result<()>;
+type CreateBinSymlinkFn = dyn Fn(&str, &dyn Software) -> Result<()>;
 
 #[cfg(test)]
 type CreateTmpFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
@@ -153,7 +158,7 @@ impl StubFileSystem {
         self
     }
 
-    pub fn with_create_bin_symlink_fn<F: Fn(&dyn Software, &str) -> Result<()> + 'static>(
+    pub fn with_create_bin_symlink_fn<F: Fn(&str, &dyn Software) -> Result<()> + 'static>(
         mut self,
         create_bin_symlink_fn: F,
     ) -> Self {
@@ -187,9 +192,9 @@ impl FileSystem for StubFileSystem {
         }
     }
 
-    fn create_bin_symlink(&self, software: &dyn Software, cfg_sha256: &str) -> Result<()> {
+    fn create_bin_symlink(&self, dir_id: &str, software: &dyn Software) -> Result<()> {
         match &self.create_bin_symlink_fn {
-            Some(create_bin_symlink_fn) => create_bin_symlink_fn(software, cfg_sha256),
+            Some(create_bin_symlink_fn) => create_bin_symlink_fn(dir_id, software),
             None => unimplemented!(),
         }
     }
@@ -276,17 +281,14 @@ mod test {
             #[test]
             fn should_return_err() {
                 let software = StubSoftware::new("software", "1.2.3");
-                let cfg_sha256 = "sha256";
+                let dir_id = "dir_id";
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let filepath = denv_dirpath
-                    .join(CONFIGURATIONS_DIRNAME)
-                    .join(cfg_sha256)
-                    .join(software.name());
+                let filepath = cfg_dirpath!(denv_dirpath, dir_id).join(software.name());
                 create_dir_all(filepath.parent().unwrap()).unwrap();
                 write(filepath, "").unwrap();
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                if fs.create_bin_symlink(&software, cfg_sha256).is_ok() {
+                if fs.create_bin_symlink(dir_id, &software).is_ok() {
                     panic!("should fail");
                 }
             }
@@ -294,16 +296,13 @@ mod test {
             #[test]
             fn should_create_symlink() {
                 let software = StubSoftware::new("software", "1.2.3");
-                let cfg_sha256 = "sha256";
+                let dir_id = "dir_id";
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let src_filepath = software_bin_filepath!(denv_dirpath, software);
-                let dest_filepath = denv_dirpath
-                    .join(CONFIGURATIONS_DIRNAME)
-                    .join(cfg_sha256)
-                    .join(software.name());
+                let dest_filepath = cfg_dirpath!(denv_dirpath, dir_id).join(software.name());
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                fs.create_bin_symlink(&software, cfg_sha256).unwrap();
+                fs.create_bin_symlink(dir_id, &software).unwrap();
                 assert!(dest_filepath.is_symlink());
                 assert_eq!(read_link(dest_filepath).unwrap(), src_filepath);
             }

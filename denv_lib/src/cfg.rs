@@ -9,10 +9,8 @@ use crate::{
     software::terraform::*,
     software::*,
 };
-use hex::encode;
 use jsonschema::JSONSchema;
 use log::debug;
-use sha2::{Digest, Sha256};
 use std::{
     fmt::{self, Display, Formatter},
     fs::read_to_string,
@@ -74,16 +72,6 @@ impl Config {
             unzipper: Box::new(DefaultUnzipper),
         };
         Ok(cfg)
-    }
-
-    pub fn sha256(&self) -> String {
-        let mut hasher = Sha256::new();
-        for software in &self.softwares {
-            hasher.update(software.name());
-            hasher.update(software.version());
-        }
-        let sha256 = hasher.finalize();
-        encode(sha256)
     }
 
     pub fn softwares(&self) -> &[Box<dyn Software>] {
@@ -238,25 +226,6 @@ mod test {
                 assert_eq!(cfg.softwares(), softwares);
                 assert_eq!(cfg.fs.denv_dirpath(), denv_dirpath);
                 assert_eq!(cfg.fs.tmp_dirpath(), tmp_dirpath);
-            }
-        }
-
-        mod sha256 {
-            use super::*;
-
-            #[test]
-            fn should_return_sha256_hex_string() {
-                let mut cfg = Config::stub();
-                let software1 = StubSoftware::new("stub", "1.2.3");
-                let software2 = StubSoftware::new("stub", "1.2.4");
-                let mut hasher = Sha256::new();
-                hasher.update(software1.name());
-                hasher.update(software1.version());
-                hasher.update(software2.name());
-                hasher.update(software2.version());
-                let expected = encode(hasher.finalize());
-                cfg.softwares = vec![Box::new(software1), Box::new(software2)];
-                assert_eq!(cfg.sha256(), expected);
             }
         }
 
