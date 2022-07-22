@@ -1,5 +1,5 @@
 use crate::{error::*, software::*};
-use log::{debug, trace};
+use log::debug;
 use std::{
     fs::{create_dir_all, File, OpenOptions},
     os::unix::fs::symlink,
@@ -28,7 +28,6 @@ macro_rules! env_dirpath {
 
 macro_rules! open_file {
     ($path:expr) => {{
-        trace!("Opening {} in write mode", $path.display());
         OpenOptions::new()
             .create(true)
             .write(true)

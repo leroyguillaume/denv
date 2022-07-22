@@ -1,5 +1,5 @@
 use crate::error::*;
-use log::{debug, trace};
+use log::debug;
 use reqwest::{self, blocking::get};
 use std::io::{BufWriter, Write};
 
@@ -19,10 +19,8 @@ impl Downloader for DefaultDownloader {
         if !status.is_success() {
             return Err(DownloadError::RequestFailed(resp));
         }
-        let size = resp
-            .copy_to(&mut buf)
+        resp.copy_to(&mut buf)
             .map_err(DownloadError::WritingFailed)?;
-        trace!("{} bytes written", size);
         Ok(())
     }
 }
