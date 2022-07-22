@@ -128,12 +128,12 @@ impl Display for InstallError {
 }
 
 #[derive(Debug)]
-pub enum RunError {
+pub enum EnvironmentLoadError {
     InstallFailed(String, InstallError),
     SymlinkCreationFailed(String, FileSystemError),
 }
 
-impl Display for RunError {
+impl Display for EnvironmentLoadError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Self::InstallFailed(software, err) => {
@@ -360,7 +360,7 @@ mod test {
         }
     }
 
-    mod run_error {
+    mod environment_load_error {
         use super::*;
 
         mod to_string {
@@ -378,7 +378,7 @@ mod test {
                     let software: Box<dyn Software> =
                         Box::new(StubSoftware::new("software", "1.2.3"));
                     let expected = format!("Unable to install {}: {}", software, err);
-                    let err = RunError::InstallFailed(software.to_string(), err);
+                    let err = EnvironmentLoadError::InstallFailed(software.to_string(), err);
                     assert_eq!(err.to_string(), expected);
                 }
             }

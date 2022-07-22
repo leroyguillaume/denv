@@ -83,8 +83,8 @@ fn main() {
             exit(exitcode::CONFIG);
         }
     };
-    let denv = DEnv::new(cur_dirpath);
-    match denv.run(&cfg) {
+    let env = Environment::new(cur_dirpath);
+    match env.load(&cfg) {
         Ok(()) => exit(exitcode::OK),
         Err(errs) => {
             for err in errs {

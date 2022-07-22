@@ -18,26 +18,32 @@ macro_rules! env_id {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct DEnv(PathBuf);
+pub struct Environment(PathBuf);
 
-impl DEnv {
+impl Environment {
     pub fn new(path: PathBuf) -> Self {
         Self(path)
     }
 
-    pub fn run(&self, cfg: &Config) -> Result<(), Vec<RunError>> {
-        let mut errs: Vec<RunError> = vec![];
+    pub fn load(&self, cfg: &Config) -> Result<(), Vec<EnvironmentLoadError>> {
+        let mut errs: Vec<EnvironmentLoadError> = vec![];
         let env_id = env_id!(self.0);
         for software in cfg.softwares() {
             let software = software.as_ref();
             if cfg.fs.is_installed_software(software) {
                 debug!("{} is already installed", software);
             } else if let Err(err) = software.install(cfg) {
-                errs.push(RunError::InstallFailed(software.to_string(), err));
+                errs.push(EnvironmentLoadError::InstallFailed(
+                    software.to_string(),
+                    err,
+                ));
                 continue;
             }
             if let Err(err) = cfg.fs.create_bin_symlink(&env_id, software) {
-                errs.push(RunError::SymlinkCreationFailed(software.to_string(), err))
+                errs.push(EnvironmentLoadError::SymlinkCreationFailed(
+                    software.to_string(),
+                    err,
+                ))
             }
         }
         if errs.is_empty() {
@@ -54,21 +60,21 @@ mod test {
     use crate::{internal::fs::*, software::*};
     use std::io;
 
-    mod denv {
+    mod environment {
         use super::*;
 
         mod new {
             use super::*;
 
             #[test]
-            fn should_return_denv() {
-                let expected = DEnv(PathBuf::from("/denv"));
-                let denv = DEnv::new(expected.0.clone());
+            fn should_return_env() {
+                let expected = Environment(PathBuf::from("/denv"));
+                let denv = Environment::new(expected.0.clone());
                 assert_eq!(denv, expected);
             }
         }
 
-        mod run {
+        mod load {
             use super::*;
 
             #[test]
@@ -116,17 +122,17 @@ mod test {
                 let cfg = Config::stub()
                     .with_softwares(vec![software1, software2])
                     .with_fs(fs);
-                let denv = DEnv::new(PathBuf::from("/denv"));
-                let errs = denv.run(&cfg).unwrap_err();
+                let env = Environment::new(PathBuf::from("/denv"));
+                let errs = env.load(&cfg).unwrap_err();
                 assert_eq!(errs.len(), 2);
                 match &errs[0] {
-                    RunError::InstallFailed(software, _) => {
+                    EnvironmentLoadError::InstallFailed(software, _) => {
                         assert_eq!(software.clone(), software1_str)
                     }
                     _ => panic!(),
                 }
                 match &errs[1] {
-                    RunError::SymlinkCreationFailed(software, _) => {
+                    EnvironmentLoadError::SymlinkCreationFailed(software, _) => {
                         assert_eq!(software.clone(), software2_str)
                     }
                     _ => panic!(),
@@ -174,8 +180,8 @@ mod test {
                 let cfg = Config::stub()
                     .with_softwares(vec![software1, software2])
                     .with_fs(fs);
-                let denv = DEnv::new(PathBuf::from("/denv"));
-                denv.run(&cfg).unwrap();
+                let env = Environment::new(PathBuf::from("/denv"));
+                env.load(&cfg).unwrap();
             }
         }
     }
