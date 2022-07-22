@@ -93,13 +93,28 @@ impl Config {
 
 #[cfg(test)]
 impl Config {
-    pub fn stub(fs: StubFileSystem, downloader: StubDownloader, unziper: StubUnzipper) -> Self {
+    pub fn stub() -> Self {
         Self {
             softwares: vec![],
-            downloader: Box::new(downloader),
-            fs: Box::new(fs),
-            unzipper: Box::new(unziper),
+            downloader: Box::new(StubDownloader::new()),
+            fs: Box::new(StubFileSystem::new()),
+            unzipper: Box::new(StubUnzipper::new()),
         }
+    }
+
+    pub fn with_downloader(mut self, downloader: StubDownloader) -> Self {
+        self.downloader = Box::new(downloader);
+        self
+    }
+
+    pub fn with_fs(mut self, fs: StubFileSystem) -> Self {
+        self.fs = Box::new(fs);
+        self
+    }
+
+    pub fn with_unzipper(mut self, unzipper: StubUnzipper) -> Self {
+        self.unzipper = Box::new(unzipper);
+        self
     }
 }
 
@@ -226,11 +241,7 @@ mod test {
 
             #[test]
             fn should_return_sha256_hex_string() {
-                let mut cfg = Config::stub(
-                    StubFileSystem::new(),
-                    StubDownloader::new(),
-                    StubUnzipper::new(),
-                );
+                let mut cfg = Config::stub();
                 let software1 = StubSoftware::new("stub", "1.2.3");
                 let software2 = StubSoftware::new("stub", "1.2.4");
                 let mut hasher = Sha256::new();
@@ -249,11 +260,7 @@ mod test {
 
             #[test]
             fn should_return_softwares() {
-                let mut cfg = Config::stub(
-                    StubFileSystem::new(),
-                    StubDownloader::new(),
-                    StubUnzipper::new(),
-                );
+                let mut cfg = Config::stub();
                 let software1 = StubSoftware::new("stub", "1.2.3");
                 let software2 = StubSoftware::new("stub", "1.2.4");
                 cfg.softwares = vec![Box::new(software1), Box::new(software2)];

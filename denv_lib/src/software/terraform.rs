@@ -107,9 +107,7 @@ mod test {
                                     Err(FileSystemError::new(PathBuf::from("/error"), io::Error::from(io::ErrorKind::PermissionDenied)))
                                 }
                             });
-                        let downloader = StubDownloader::new();
-                        let unziper = StubUnzipper::new();
-                        let cfg = Config::stub(fs, downloader, unziper);
+                        let cfg = Config::stub().with_fs(fs);
                         match tf.install(&cfg) {
                             Ok(_) => panic!("should fail"),
                             Err(InstallError::FileSystemWritingFailed(_)) => {}
@@ -147,8 +145,7 @@ mod test {
                                 let resp = get("https://fr.archive.ubuntu.com/ubuntu2/").unwrap();
                                 Err(DownloadError::RequestFailed(resp))
                             });
-                        let unziper = StubUnzipper::new();
-                        let cfg = Config::stub(fs, downloader, unziper);
+                        let cfg = Config::stub().with_fs(fs).with_downloader(downloader);
                         match tf.install(&cfg) {
                             Ok(_) => panic!("should fail"),
                             Err(InstallError::DownloadFailed(_)) => {}
@@ -190,8 +187,7 @@ mod test {
                                 assert_eq!(url, expected_url);
                                 Ok(())
                             });
-                        let unziper = StubUnzipper::new();
-                        let cfg = Config::stub(fs, downloader, unziper);
+                        let cfg = Config::stub().with_fs(fs).with_downloader(downloader);
                         match tf.install(&cfg) {
                             Ok(_) => panic!("should fail"),
                             Err(InstallError::FileSystemWritingFailed(_)) => {}
@@ -246,8 +242,8 @@ mod test {
                                 Err(UnzipError::FileOpeningFailed(
                                     io::Error::from(io::ErrorKind::PermissionDenied)
                                 ))
-                    }});
-                        let cfg = Config::stub(fs, downloader, unziper);
+                            }});
+                        let cfg = Config::stub().with_fs(fs).with_downloader(downloader).with_unzipper(unziper);
                         match tf.install(&cfg) {
                             Ok(_) => panic!("should fail"),
                             Err(InstallError::UnzipFailed(zip_filepath, filepath, _)) => {
@@ -302,7 +298,7 @@ mod test {
                                 assert_eq!(filename, SOFTWARE_NAME);
                                 Ok(())
                             });
-                        let cfg = Config::stub(fs, downloader, unziper);
+                        let cfg = Config::stub().with_fs(fs).with_downloader(downloader).with_unzipper(unziper);
                         tf.install(&cfg).unwrap()
                     }
                 };

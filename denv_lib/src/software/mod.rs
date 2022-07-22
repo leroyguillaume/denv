@@ -92,7 +92,7 @@ impl Software for StubSoftware {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::internal::{downloader::*, fs::*, unzip::*};
+    use crate::internal::fs::*;
     use std::{io, path::PathBuf};
 
     mod software {
@@ -120,7 +120,7 @@ mod test {
                         ))
                     },
                 );
-                let cfg = Config::stub(fs, StubDownloader::new(), StubUnzipper::new());
+                let cfg = Config::stub().with_fs(fs);
                 if software.add_to_path(&cfg).is_ok() {
                     panic!("should fail");
                 }
@@ -142,7 +142,7 @@ mod test {
                         Ok(())
                     },
                 );
-                let cfg = Config::stub(fs, StubDownloader::new(), StubUnzipper::new());
+                let cfg = Config::stub().with_fs(fs);
                 software.add_to_path(&cfg).unwrap();
             }
         }
@@ -182,7 +182,7 @@ mod test {
                                 $expected
                             },
                         );
-                        let cfg = Config::stub(fs, StubDownloader::new(), StubUnzipper::new());
+                        let cfg = Config::stub().with_fs(fs);
                         assert_eq!(software.is_installed(&cfg), $expected);
                     }
                 };
