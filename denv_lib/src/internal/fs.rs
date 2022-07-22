@@ -6,14 +6,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-macro_rules! cfg_dirpath {
-    ($denv_dirpath:expr, $dir_id:expr) => {
-        $denv_dirpath
-            .join(CONFIGURATIONS_DIRNAME)
-            .join(Path::new($dir_id))
-    };
-}
-
 macro_rules! ensure_dir {
     ($path:expr) => {
         if $path.is_dir() {
@@ -23,6 +15,14 @@ macro_rules! ensure_dir {
             debug!("Creating directory {}", $path.display());
             create_dir_all($path).map_err(|err| FileSystemError::new($path.clone(), err))
         }
+    };
+}
+
+macro_rules! env_dirpath {
+    ($denv_dirpath:expr, $dir_id:expr) => {
+        $denv_dirpath
+            .join(ENVIRONMENTS_DIRNAME)
+            .join(Path::new($dir_id))
     };
 }
 
@@ -54,7 +54,7 @@ macro_rules! software_dirpath {
 }
 
 const SOFTWARES_DIRNAME: &str = "softwares";
-const CONFIGURATIONS_DIRNAME: &str = "configurations";
+const ENVIRONMENTS_DIRNAME: &str = "environments";
 
 pub type Result<T> = std::result::Result<T, FileSystemError>;
 
@@ -93,9 +93,9 @@ impl FileSystem for DefaultFileSystem {
         open_file!(software_bin_filepath!(self.denv_dirpath, software))
     }
 
-    fn create_bin_symlink(&self, dir_id: &str, software: &dyn Software) -> Result<()> {
+    fn create_bin_symlink(&self, env_id: &str, software: &dyn Software) -> Result<()> {
         let src_filepath = software_bin_filepath!(self.denv_dirpath, software);
-        let dest_dirpath = cfg_dirpath!(self.denv_dirpath, dir_id);
+        let dest_dirpath = env_dirpath!(self.denv_dirpath, env_id);
         ensure_dir!(&dest_dirpath)?;
         let dest_filepath = dest_dirpath.join(software.name());
         debug!(
@@ -281,14 +281,14 @@ mod test {
             #[test]
             fn should_return_err() {
                 let software = StubSoftware::new("software", "1.2.3");
-                let dir_id = "dir_id";
+                let env_id = "env_id";
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
-                let filepath = cfg_dirpath!(denv_dirpath, dir_id).join(software.name());
+                let filepath = env_dirpath!(denv_dirpath, env_id).join(software.name());
                 create_dir_all(filepath.parent().unwrap()).unwrap();
                 write(filepath, "").unwrap();
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                if fs.create_bin_symlink(dir_id, &software).is_ok() {
+                if fs.create_bin_symlink(env_id, &software).is_ok() {
                     panic!("should fail");
                 }
             }
@@ -296,13 +296,13 @@ mod test {
             #[test]
             fn should_create_symlink() {
                 let software = StubSoftware::new("software", "1.2.3");
-                let dir_id = "dir_id";
+                let env_id = "env_id";
                 let denv_dirpath = tempdir().unwrap().into_path();
                 let tmp_dirpath = tempdir().unwrap().into_path();
                 let src_filepath = software_bin_filepath!(denv_dirpath, software);
-                let dest_filepath = cfg_dirpath!(denv_dirpath, dir_id).join(software.name());
+                let dest_filepath = env_dirpath!(denv_dirpath, env_id).join(software.name());
                 let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
-                fs.create_bin_symlink(dir_id, &software).unwrap();
+                fs.create_bin_symlink(env_id, &software).unwrap();
                 assert!(dest_filepath.is_symlink());
                 assert_eq!(read_link(dest_filepath).unwrap(), src_filepath);
             }

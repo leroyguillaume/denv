@@ -7,7 +7,7 @@ use crate::{cfg::*, error::*};
 use log::debug;
 use std::path::PathBuf;
 
-macro_rules! dir_id {
+macro_rules! env_id {
     ($path:expr) => {{
         use sha2::Digest;
         let mut hasher = sha2::Sha256::new();
@@ -27,7 +27,7 @@ impl DEnv {
 
     pub fn run(&self, cfg: &Config) -> Result<(), Vec<RunError>> {
         let mut errs: Vec<RunError> = vec![];
-        let dir_id = dir_id!(self.0);
+        let env_id = env_id!(self.0);
         for software in cfg.softwares() {
             let software = software.as_ref();
             if cfg.fs.is_installed_software(software) {
@@ -36,7 +36,7 @@ impl DEnv {
                 errs.push(RunError::InstallFailed(software.to_string(), err));
                 continue;
             }
-            if let Err(err) = cfg.fs.create_bin_symlink(&dir_id, software) {
+            if let Err(err) = cfg.fs.create_bin_symlink(&env_id, software) {
                 errs.push(RunError::SymlinkCreationFailed(software.to_string(), err))
             }
         }
@@ -93,7 +93,7 @@ mod test {
                 let software2_str = software2.to_string();
                 let fs = StubFileSystem::new()
                     .with_create_bin_symlink_fn(move |dir_id, software| {
-                        assert_eq!(dir_id, dir_id!(dirpath));
+                        assert_eq!(dir_id, env_id!(dirpath));
                         assert_eq!(software.name(), software2_name);
                         assert_eq!(software.version(), software2_version);
                         Err(FileSystemError::new(
@@ -149,7 +149,7 @@ mod test {
                 let fs = StubFileSystem::new()
                     .with_create_bin_symlink_fn(move |dir_id, software| {
                         let name = software.name();
-                        assert_eq!(dir_id, dir_id!(dirpath));
+                        assert_eq!(dir_id, env_id!(dirpath));
                         if name == software1_name {
                             assert_eq!(software.version(), software1_version);
                         } else if name == software2_name {
