@@ -2,6 +2,7 @@ pub mod cfg;
 pub mod error;
 mod internal;
 pub mod software;
+pub mod var;
 
 use crate::{cfg::*, error::*};
 use log::{debug, info};
