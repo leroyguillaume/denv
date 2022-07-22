@@ -2,10 +2,7 @@ mod logger;
 
 use clap::Parser;
 use clap_verbosity_flag::Verbosity;
-use denv_lib::{
-    cfg::{Config, LoadingError},
-    *,
-};
+use denv_lib::{cfg::Config, error::ConfigLoadError, *};
 use home::home_dir;
 use log::error;
 use logger::Logger;
@@ -67,11 +64,11 @@ fn main() {
     });
     let cfg = match Config::load(&cfg_filepath, denv_dirpath, tmp_dirpath) {
         Ok(cfg) => cfg,
-        Err(LoadingError::FileOpeningFailed(err)) => {
+        Err(ConfigLoadError::FileOpeningFailed(err)) => {
             error!("Unable to open {}: {}", cfg_filepath.display(), err);
             exit(exitcode::CONFIG);
         }
-        Err(LoadingError::InvalidConfig(errs)) => {
+        Err(ConfigLoadError::InvalidConfig(errs)) => {
             error!("Invalid configuration file:");
             for err in errs {
                 error!("  - {}", err);

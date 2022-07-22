@@ -13,6 +13,23 @@ use zip::result::ZipError;
 pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
 
 #[derive(Debug)]
+pub enum ConfigLoadError {
+    FileOpeningFailed(io::Error),
+    InvalidYaml(serde_yaml::Error),
+    InvalidConfig(Vec<String>),
+}
+
+impl Display for ConfigLoadError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::FileOpeningFailed(err) => write!(f, "{}", err),
+            Self::InvalidYaml(err) => write!(f, "Invalid YAML syntax: {}", err),
+            Self::InvalidConfig(_) => write!(f, "Invalid configuration file"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum DownloadError {
     RequestProcessingFailed(reqwest::Error),
     RequestFailed(Response),
@@ -187,6 +204,48 @@ mod test {
     use reqwest::blocking::get;
     use tempfile::tempfile;
     use zip::ZipArchive;
+
+    mod config_load_error {
+        use super::*;
+
+        mod to_string {
+            use super::*;
+
+            mod file_opening_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let err = io::Error::from(io::ErrorKind::PermissionDenied);
+                    let expected = err.to_string();
+                    let err = ConfigLoadError::FileOpeningFailed(err);
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
+
+            mod invalid_yaml {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let err = serde_yaml::from_str::<serde_yaml::Value>("{").unwrap_err();
+                    let expected = format!("Invalid YAML syntax: {}", err);
+                    let err = ConfigLoadError::InvalidYaml(err);
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
+
+            mod invalid_config {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let err = ConfigLoadError::InvalidConfig(vec![]);
+                    assert_eq!(err.to_string(), "Invalid configuration file");
+                }
+            }
+        }
+    }
 
     mod download_error {
         use super::*;

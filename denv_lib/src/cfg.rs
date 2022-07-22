@@ -1,6 +1,7 @@
 #[cfg(test)]
 use crate::internal::fs::StubFileSystem;
 use crate::{
+    error::*,
     internal::{
         downloader::*,
         fs::{DefaultFileSystem, FileSystem},
@@ -12,28 +13,9 @@ use crate::{
 use jsonschema::JSONSchema;
 use log::debug;
 use std::{
-    fmt::{self, Display, Formatter},
     fs::read_to_string,
-    io,
     path::{Path, PathBuf},
 };
-
-#[derive(Debug)]
-pub enum LoadingError {
-    FileOpeningFailed(io::Error),
-    InvalidYaml(serde_yaml::Error),
-    InvalidConfig(Vec<String>),
-}
-
-impl Display for LoadingError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::FileOpeningFailed(err) => write!(f, "{}", err),
-            Self::InvalidYaml(err) => write!(f, "Invalid YAML syntax: {}", err),
-            Self::InvalidConfig(_) => write!(f, "Invalid configuration file"),
-        }
-    }
-}
 
 pub struct Config {
     softwares: Vec<Box<dyn Software>>,
@@ -47,17 +29,17 @@ impl Config {
         filepath: &Path,
         denv_dirpath: PathBuf,
         tmp_dirpath: PathBuf,
-    ) -> Result<Self, LoadingError> {
+    ) -> Result<Self, ConfigLoadError> {
         debug!("Loading configuration from {}", filepath.display());
-        let cfg = read_to_string(filepath).map_err(LoadingError::FileOpeningFailed)?;
-        let cfg =
-            serde_yaml::from_str::<serde_json::Value>(&cfg).map_err(LoadingError::InvalidYaml)?;
+        let cfg = read_to_string(filepath).map_err(ConfigLoadError::FileOpeningFailed)?;
+        let cfg = serde_yaml::from_str::<serde_json::Value>(&cfg)
+            .map_err(ConfigLoadError::InvalidYaml)?;
         let schema = include_str!("../config.schema.json");
         let schema = serde_json::from_str(schema).unwrap();
         let schema = JSONSchema::compile(&schema).unwrap();
         if let Err(err_iter) = schema.validate(&cfg) {
             let errs = err_iter.map(|err| err.to_string()).collect();
-            return Err(LoadingError::InvalidConfig(errs));
+            return Err(ConfigLoadError::InvalidConfig(errs));
         }
         let mut softwares: Vec<Box<dyn Software>> = vec![];
         if let Some(cfg_softwares) = cfg.get("softwares") {
@@ -117,48 +99,6 @@ mod test {
     use std::{fs::File, io::Write};
     use tempfile::tempdir;
 
-    mod loading_error {
-        use super::*;
-
-        mod to_string {
-            use super::*;
-
-            mod file_opening_failed {
-                use super::*;
-
-                #[test]
-                fn should_return_string() {
-                    let err = io::Error::from(io::ErrorKind::PermissionDenied);
-                    let expected = err.to_string();
-                    let err = LoadingError::FileOpeningFailed(err);
-                    assert_eq!(err.to_string(), expected);
-                }
-            }
-
-            mod invalid_yaml {
-                use super::*;
-
-                #[test]
-                fn should_return_string() {
-                    let err = serde_yaml::from_str::<serde_yaml::Value>("{").unwrap_err();
-                    let expected = format!("Invalid YAML syntax: {}", err);
-                    let err = LoadingError::InvalidYaml(err);
-                    assert_eq!(err.to_string(), expected);
-                }
-            }
-
-            mod invalid_config {
-                use super::*;
-
-                #[test]
-                fn should_return_string() {
-                    let err = LoadingError::InvalidConfig(vec![]);
-                    assert_eq!(err.to_string(), "Invalid configuration file");
-                }
-            }
-        }
-    }
-
     mod config {
         use super::*;
 
@@ -173,7 +113,7 @@ mod test {
                     PathBuf::from("/tmp/denv"),
                 ) {
                     Ok(_) => panic!("should fail"),
-                    Err(LoadingError::FileOpeningFailed(_)) => {}
+                    Err(ConfigLoadError::FileOpeningFailed(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
@@ -190,7 +130,7 @@ mod test {
                     PathBuf::from("/tmp/denv"),
                 ) {
                     Ok(_) => panic!("should fail"),
-                    Err(LoadingError::InvalidYaml(_)) => {}
+                    Err(ConfigLoadError::InvalidYaml(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
@@ -207,7 +147,7 @@ mod test {
                     PathBuf::from("/tmp/denv"),
                 ) {
                     Ok(_) => panic!("should fail"),
-                    Err(LoadingError::InvalidConfig(_)) => {}
+                    Err(ConfigLoadError::InvalidConfig(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
