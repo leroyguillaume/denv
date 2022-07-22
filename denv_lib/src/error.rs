@@ -128,6 +128,25 @@ impl Display for InstallError {
 }
 
 #[derive(Debug)]
+pub enum RunError {
+    InstallFailed(String, InstallError),
+    SymlinkCreationFailed(String, FileSystemError),
+}
+
+impl Display for RunError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::InstallFailed(software, err) => {
+                write!(f, "Unable to install {}: {}", software, err)
+            }
+            Self::SymlinkCreationFailed(software, err) => {
+                write!(f, "Unable to create symlink for {}: {}", software, err)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum UnzipError {
     FileOpeningFailed(io::Error),
     InvalidZipFile(ZipError),
@@ -163,6 +182,7 @@ impl Write for WriteFailer {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::software::*;
     use maplit::{hashmap, hashset};
     use reqwest::blocking::get;
     use tempfile::tempfile;
@@ -334,6 +354,31 @@ mod test {
                         err
                     );
                     let err = InstallError::UnzipFailed(zip_filepath, filepath.into(), err);
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
+        }
+    }
+
+    mod run_error {
+        use super::*;
+
+        mod to_string {
+            use super::*;
+
+            mod install_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let err = InstallError::FileSystemWritingFailed(FileSystemError::new(
+                        PathBuf::from("/error"),
+                        io::Error::from(io::ErrorKind::PermissionDenied),
+                    ));
+                    let software: Box<dyn Software> =
+                        Box::new(StubSoftware::new("software", "1.2.3"));
+                    let expected = format!("Unable to install {}: {}", software, err);
+                    let err = RunError::InstallFailed(software.to_string(), err);
                     assert_eq!(err.to_string(), expected);
                 }
             }

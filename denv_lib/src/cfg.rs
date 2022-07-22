@@ -102,6 +102,11 @@ impl Config {
         }
     }
 
+    pub fn with_softwares(mut self, softwares: Vec<Box<dyn Software>>) -> Self {
+        self.softwares = softwares;
+        self
+    }
+
     pub fn with_downloader(mut self, downloader: StubDownloader) -> Self {
         self.downloader = Box::new(downloader);
         self
