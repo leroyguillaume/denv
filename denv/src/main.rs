@@ -83,11 +83,6 @@ fn main() {
     let env = Environment::new(cur_dirpath);
     match env.load(&cfg) {
         Ok(()) => exit(exitcode::OK),
-        Err(errs) => {
-            for err in errs {
-                error!("{}", err);
-            }
-            exit(exitcode::SOFTWARE);
-        }
+        Err(_) => exit(exitcode::SOFTWARE),
     }
 }

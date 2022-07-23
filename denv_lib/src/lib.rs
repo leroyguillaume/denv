@@ -5,7 +5,7 @@ pub mod software;
 pub mod var;
 
 use crate::{cfg::*, error::*};
-use log::{debug, info};
+use log::{debug, error, info};
 use std::path::PathBuf;
 
 macro_rules! env_id {
@@ -26,34 +26,33 @@ impl Environment {
         Self(path)
     }
 
-    pub fn load(&self, cfg: &Config) -> Result<(), Vec<EnvironmentLoadError>> {
-        let mut errs: Vec<EnvironmentLoadError> = vec![];
+    pub fn load(&self, cfg: &Config) -> Result<(), EnvironmentLoadError> {
+        let mut install_errs: Vec<(String, InstallError)> = vec![];
+        let mut symlink_errs: Vec<(String, FileSystemError)> = vec![];
         let env_id = env_id!(self.0);
         for software in cfg.softwares() {
             let software = software.as_ref();
             if cfg.fs.is_installed_software(software) {
                 debug!("{} is already installed", software);
             } else if let Err(err) = software.install(cfg) {
-                errs.push(EnvironmentLoadError::InstallFailed(
-                    software.to_string(),
-                    err,
-                ));
+                error!("Unable to install {}: {}", software, err);
+                install_errs.push((software.to_string(), err));
                 continue;
             }
             if let Err(err) = cfg.fs.create_bin_symlink(&env_id, software) {
-                errs.push(EnvironmentLoadError::SymlinkCreationFailed(
-                    software.to_string(),
-                    err,
-                ));
+                error!("Unable to create symlink for {}: {}", software, err);
+                symlink_errs.push((software.to_string(), err));
                 continue;
             }
             info!("{}", software);
         }
-        if errs.is_empty() {
-            Ok(())
-        } else {
-            Err(errs)
+        if !install_errs.is_empty() || !symlink_errs.is_empty() {
+            return Err(EnvironmentLoadError::InstallFailed {
+                install_errs,
+                symlink_errs,
+            });
         }
+        Ok(())
     }
 }
 
@@ -126,19 +125,16 @@ mod test {
                     .with_softwares(vec![software1, software2])
                     .with_fs(fs);
                 let env = Environment::new(PathBuf::from("/denv"));
-                let errs = env.load(&cfg).unwrap_err();
-                assert_eq!(errs.len(), 2);
-                match &errs[0] {
-                    EnvironmentLoadError::InstallFailed(software, _) => {
-                        assert_eq!(software.clone(), software1_str)
+                match env.load(&cfg).unwrap_err() {
+                    EnvironmentLoadError::InstallFailed {
+                        install_errs,
+                        symlink_errs,
+                    } => {
+                        assert_eq!(install_errs.len(), 1);
+                        assert_eq!(install_errs[0].0, software1_str);
+                        assert_eq!(symlink_errs.len(), 1);
+                        assert_eq!(symlink_errs[0].0, software2_str);
                     }
-                    _ => panic!(),
-                }
-                match &errs[1] {
-                    EnvironmentLoadError::SymlinkCreationFailed(software, _) => {
-                        assert_eq!(software.clone(), software2_str)
-                    }
-                    _ => panic!(),
                 }
             }
 

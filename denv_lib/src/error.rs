@@ -61,6 +61,22 @@ impl Display for DownloadError {
 }
 
 #[derive(Debug)]
+pub enum EnvironmentLoadError {
+    InstallFailed {
+        install_errs: Vec<(String, InstallError)>,
+        symlink_errs: Vec<(String, FileSystemError)>,
+    },
+}
+
+impl Display for EnvironmentLoadError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::InstallFailed { .. } => write!(f, "Unable to install some softwares"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct FileSystemError {
     path: PathBuf,
     source: io::Error,
@@ -145,25 +161,6 @@ impl Display for InstallError {
 }
 
 #[derive(Debug)]
-pub enum EnvironmentLoadError {
-    InstallFailed(String, InstallError),
-    SymlinkCreationFailed(String, FileSystemError),
-}
-
-impl Display for EnvironmentLoadError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Self::InstallFailed(software, err) => {
-                write!(f, "Unable to install {}: {}", software, err)
-            }
-            Self::SymlinkCreationFailed(software, err) => {
-                write!(f, "Unable to create symlink for {}: {}", software, err)
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum UnzipError {
     FileOpeningFailed(io::Error),
     InvalidZipFile(ZipError),
@@ -199,7 +196,6 @@ impl Write for WriteFailer {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::software::*;
     use maplit::{hashmap, hashset};
     use reqwest::blocking::get;
     use tempfile::tempfile;
@@ -295,6 +291,28 @@ mod test {
                         .unwrap_err();
                     let expected = format!("I/O failed: {}", err);
                     let err = DownloadError::WritingFailed(err);
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
+        }
+    }
+
+    mod environment_load_error {
+        use super::*;
+
+        mod to_string {
+            use super::*;
+
+            mod install_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let expected = "Unable to install some softwares";
+                    let err = EnvironmentLoadError::InstallFailed {
+                        install_errs: vec![],
+                        symlink_errs: vec![],
+                    };
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -413,31 +431,6 @@ mod test {
                         err
                     );
                     let err = InstallError::UnzipFailed(zip_filepath, filepath.into(), err);
-                    assert_eq!(err.to_string(), expected);
-                }
-            }
-        }
-    }
-
-    mod environment_load_error {
-        use super::*;
-
-        mod to_string {
-            use super::*;
-
-            mod install_failed {
-                use super::*;
-
-                #[test]
-                fn should_return_string() {
-                    let err = InstallError::FileSystemWritingFailed(FileSystemError::new(
-                        PathBuf::from("/error"),
-                        io::Error::from(io::ErrorKind::PermissionDenied),
-                    ));
-                    let software: Box<dyn Software> =
-                        Box::new(StubSoftware::new("software", "1.2.3"));
-                    let expected = format!("Unable to install {}: {}", software, err);
-                    let err = EnvironmentLoadError::InstallFailed(software.to_string(), err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
