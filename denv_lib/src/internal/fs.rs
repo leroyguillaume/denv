@@ -72,6 +72,8 @@ pub trait FileSystem {
 
     fn denv_dirpath(&self) -> &Path;
 
+    fn env_dirpath(&self, env_id: &str) -> PathBuf;
+
     fn is_installed_software(&self, software: &dyn Software) -> bool;
 
     fn tmp_dirpath(&self) -> &Path;
@@ -127,6 +129,10 @@ impl FileSystem for DefaultFileSystem {
         &self.denv_dirpath
     }
 
+    fn env_dirpath(&self, env_id: &str) -> PathBuf {
+        env_dirpath!(self.denv_dirpath, env_id)
+    }
+
     fn is_installed_software(&self, software: &dyn Software) -> bool {
         software_dirpath!(self.denv_dirpath, software).is_dir()
     }
@@ -149,6 +155,9 @@ type CreateEnvFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
 type CreateTmpFileFn = dyn Fn(&str) -> Result<(PathBuf, File)>;
 
 #[cfg(test)]
+type EnvDirpathFn = dyn Fn(&str) -> PathBuf;
+
+#[cfg(test)]
 type IsInstalledSoftwareFn = dyn Fn(&dyn Software) -> bool;
 
 #[cfg(test)]
@@ -157,6 +166,7 @@ pub struct StubFileSystem {
     create_bin_file_fn: Option<Box<CreateBinFileFn>>,
     create_bin_symlink_fn: Option<Box<CreateBinSymlinkFn>>,
     create_env_file_fn: Option<Box<CreateEnvFileFn>>,
+    env_dirpath_fn: Option<Box<EnvDirpathFn>>,
     create_tmp_file_fn: Option<Box<CreateTmpFileFn>>,
     is_installed_software_fn: Option<Box<IsInstalledSoftwareFn>>,
 }
@@ -196,6 +206,14 @@ impl StubFileSystem {
         create_tmp_file_fn: F,
     ) -> Self {
         self.create_tmp_file_fn = Some(Box::new(create_tmp_file_fn));
+        self
+    }
+
+    pub fn with_env_dirpath_fn<F: Fn(&str) -> PathBuf + 'static>(
+        mut self,
+        env_dirpath_fn: F,
+    ) -> Self {
+        self.env_dirpath_fn = Some(Box::new(env_dirpath_fn));
         self
     }
 
@@ -240,6 +258,13 @@ impl FileSystem for StubFileSystem {
 
     fn denv_dirpath(&self) -> &Path {
         Path::new("root")
+    }
+
+    fn env_dirpath(&self, env_id: &str) -> PathBuf {
+        match &self.env_dirpath_fn {
+            Some(env_dirpath_fn) => env_dirpath_fn(env_id),
+            None => unimplemented!(),
+        }
     }
 
     fn is_installed_software(&self, software: &dyn Software) -> bool {
@@ -464,6 +489,21 @@ mod test {
                 let (filepath, mut file) = fs.create_tmp_file(filename).unwrap();
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
+            }
+        }
+
+        mod env_dirpath {
+            use super::*;
+
+            #[test]
+            fn should_return_env_dirpath() {
+                let denv_dirpath = tempdir().unwrap().into_path();
+                let tmp_dirpath = tempdir().unwrap().into_path();
+                let env_id = "env_id";
+                let expected = env_dirpath!(denv_dirpath, env_id);
+                let fs = DefaultFileSystem::new(denv_dirpath, tmp_dirpath);
+                let env_dirpath = fs.env_dirpath(env_id);
+                assert_eq!(env_dirpath, expected);
             }
         }
 
