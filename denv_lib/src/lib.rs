@@ -55,7 +55,7 @@ impl Environment {
         let env_dirpath = cfg.fs.env_dirpath(&self.0);
         let path_var = Var::new(
             PATH_VARNAME.into(),
-            format!("{}:{}", PATH_VARNAME, env_dirpath.display()),
+            format!("${}:{}", PATH_VARNAME, env_dirpath.display()),
         );
         let (env_filepath, mut env_file) = cfg
             .fs
@@ -360,7 +360,7 @@ mod test {
                 env.load(&cfg).unwrap();
                 let path_var = Var::new(
                     PATH_VARNAME.into(),
-                    format!("{}:{}", PATH_VARNAME, env_dirpath.display()),
+                    format!("${}:{}", PATH_VARNAME, env_dirpath.display()),
                 );
                 let env_file_content = read_to_string(env_filepath).unwrap();
                 let expected_env_file_content = format!("{}\n", path_var.export_statement());
