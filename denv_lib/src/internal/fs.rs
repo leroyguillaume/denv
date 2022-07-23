@@ -1,8 +1,8 @@
 use crate::{error::*, software::*};
 use log::{debug, trace};
 use std::{
-    fs::{create_dir_all, remove_file, File, OpenOptions},
-    os::unix::fs::symlink,
+    fs::{create_dir_all, metadata, remove_file, set_permissions, File},
+    os::unix::fs::{symlink, PermissionsExt},
     path::{Path, PathBuf},
 };
 
@@ -31,7 +31,7 @@ macro_rules! open_file {
         if let Some(parent_path) = $path.parent() {
             ensure_dir!(parent_path.to_path_buf())?;
         }
-        OpenOptions::new()
+        std::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .open(&$path)
@@ -95,7 +95,15 @@ impl DefaultFileSystem {
 
 impl FileSystem for DefaultFileSystem {
     fn create_bin_file(&self, software: &dyn Software) -> Result<(PathBuf, File)> {
-        open_file!(software_bin_filepath!(self.denv_dirpath, software))
+        let (filepath, file) = open_file!(software_bin_filepath!(self.denv_dirpath, software))?;
+        let file_metadata =
+            metadata(&filepath).map_err(|err| FileSystemError::new(filepath.clone(), err))?;
+        let mut perms = file_metadata.permissions();
+        println!("{}", perms.mode());
+        perms.set_mode(0o755);
+        set_permissions(&filepath, perms)
+            .map_err(|err| FileSystemError::new(filepath.clone(), err))?;
+        Ok((filepath, file))
     }
 
     fn create_bin_symlink(&self, env_id: &str, software: &dyn Software) -> Result<()> {
@@ -329,6 +337,8 @@ mod test {
                 let (filepath, mut file) = fs.create_bin_file(&software).unwrap();
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
+                let perms = metadata(filepath).unwrap().permissions();
+                assert_eq!(perms.mode(), 0o100755);
             }
 
             #[test]
@@ -342,6 +352,8 @@ mod test {
                 let (filepath, mut file) = fs.create_bin_file(&software).unwrap();
                 assert_eq!(filepath, expected);
                 write!(file, "test").unwrap();
+                let perms = metadata(filepath).unwrap().permissions();
+                assert_eq!(perms.mode(), 0o100755);
             }
         }
 
