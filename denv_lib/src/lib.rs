@@ -5,33 +5,31 @@ pub mod software;
 pub mod var;
 
 use crate::{cfg::*, error::*, var::*};
+use hex::encode;
 use log::{debug, error, info};
+use sha2::{Digest, Sha256};
 use std::{io::Write, path::PathBuf};
-
-macro_rules! env_id {
-    ($path:expr) => {{
-        use sha2::Digest;
-        let mut hasher = sha2::Sha256::new();
-        hasher.update($path.to_string_lossy().as_bytes());
-        let sha256 = hasher.finalize();
-        hex::encode(sha256)
-    }};
-}
 
 const PATH_VARNAME: &str = "PATH";
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Environment(PathBuf);
+pub struct Environment(String);
 
 impl Environment {
     pub fn new(path: PathBuf) -> Self {
-        Self(path)
+        let mut hasher = Sha256::new();
+        hasher.update(path.to_string_lossy().as_bytes());
+        let sha256 = hasher.finalize();
+        Self(encode(sha256))
+    }
+
+    pub fn id(&self) -> &str {
+        &self.0
     }
 
     pub fn load(&self, cfg: &Config) -> Result<(), EnvironmentLoadError> {
         let mut install_errs: Vec<(String, InstallError)> = vec![];
         let mut symlink_errs: Vec<(String, FileSystemError)> = vec![];
-        let env_id = env_id!(self.0);
         for software in cfg.softwares() {
             let software = software.as_ref();
             if cfg.fs.is_installed_software(software) {
@@ -41,7 +39,7 @@ impl Environment {
                 install_errs.push((software.to_string(), err));
                 continue;
             }
-            if let Err(err) = cfg.fs.create_bin_symlink(&env_id, software) {
+            if let Err(err) = cfg.fs.create_bin_symlink(&self.0, software) {
                 error!("Unable to create symlink for {}: {}", software, err);
                 symlink_errs.push((software.to_string(), err));
                 continue;
@@ -54,14 +52,14 @@ impl Environment {
                 symlink_errs,
             });
         }
-        let env_dirpath = cfg.fs.env_dirpath(&env_id);
+        let env_dirpath = cfg.fs.env_dirpath(&self.0);
         let path_var = Var::new(
             PATH_VARNAME.into(),
             format!("{}:{}", PATH_VARNAME, env_dirpath.display()),
         );
         let (env_filepath, mut env_file) = cfg
             .fs
-            .create_env_file(&env_id)
+            .create_env_file(&self.0)
             .map_err(EnvironmentLoadError::EnvFileWritingFailed)?;
         writeln!(env_file, "{}", path_var.export_statement()).map_err(|err| {
             EnvironmentLoadError::EnvFileWritingFailed(FileSystemError::new(env_filepath, err))
@@ -87,9 +85,14 @@ mod test {
 
             #[test]
             fn should_return_env() {
-                let expected = Environment(PathBuf::from("/denv"));
-                let denv = Environment::new(expected.0.clone());
+                let dirpath = PathBuf::from("/denv");
+                let mut hasher = Sha256::new();
+                hasher.update(dirpath.to_string_lossy().as_bytes());
+                let sha256 = hasher.finalize();
+                let expected = Environment(encode(sha256));
+                let denv = Environment::new(dirpath);
                 assert_eq!(denv, expected);
+                assert_eq!(denv.id(), expected.0);
             }
         }
 
@@ -99,6 +102,8 @@ mod test {
             #[test]
             fn should_return_install_failed_err() {
                 let dirpath = PathBuf::from("/denv");
+                let env = Environment::new(dirpath);
+                let epxected_env_id = env.0.clone();
                 let software1_name = "software1";
                 let software1_version = "3.2.1";
                 let software1 = StubSoftware::new(software1_name, software1_version)
@@ -118,7 +123,7 @@ mod test {
                 let software2_str = software2.to_string();
                 let fs = StubFileSystem::new()
                     .with_create_bin_symlink_fn(move |env_id, software| {
-                        assert_eq!(env_id, env_id!(dirpath));
+                        assert_eq!(env_id, epxected_env_id);
                         assert_eq!(software.name(), software2_name);
                         assert_eq!(software.version(), software2_version);
                         Err(FileSystemError::new(
@@ -141,7 +146,6 @@ mod test {
                 let cfg = Config::stub()
                     .with_softwares(vec![software1, software2])
                     .with_fs(fs);
-                let env = Environment::new(PathBuf::from("/denv"));
                 match env.load(&cfg).unwrap_err() {
                     EnvironmentLoadError::InstallFailed {
                         install_errs,
@@ -159,7 +163,8 @@ mod test {
             #[test]
             fn should_return_env_file_writing_failed_if_env_file_opening_failed() {
                 let dirpath = PathBuf::from("/denv");
-                let expected_env_id = env_id!(dirpath);
+                let env = Environment::new(dirpath);
+                let expected_env_id = env.0.clone();
                 let software1_name = "software1";
                 let software1_version = "3.2.1";
                 let software1 = StubSoftware::new(software1_name, software1_version)
@@ -215,7 +220,6 @@ mod test {
                 let cfg = Config::stub()
                     .with_softwares(vec![software1, software2])
                     .with_fs(fs);
-                let env = Environment::new(PathBuf::from("/denv"));
                 match env.load(&cfg).unwrap_err() {
                     EnvironmentLoadError::EnvFileWritingFailed(_) => {}
                     err => panic!("{}", err),
@@ -225,7 +229,8 @@ mod test {
             #[test]
             fn should_return_env_file_writing_failed_if_env_file_writing_failed() {
                 let dirpath = PathBuf::from("/denv");
-                let expected_env_id = env_id!(dirpath);
+                let env = Environment::new(dirpath);
+                let expected_env_id = env.0.clone();
                 let env_dirpath = tempdir().unwrap().into_path();
                 let env_filepath = env_dirpath.join("env");
                 let software1_name = "software1";
@@ -283,7 +288,6 @@ mod test {
                 let cfg = Config::stub()
                     .with_softwares(vec![software1, software2])
                     .with_fs(fs);
-                let env = Environment::new(PathBuf::from("/denv"));
                 match env.load(&cfg).unwrap_err() {
                     EnvironmentLoadError::EnvFileWritingFailed(_) => {}
                     err => panic!("{}", err),
@@ -293,7 +297,8 @@ mod test {
             #[test]
             fn should_return_ok() {
                 let dirpath = PathBuf::from("/denv");
-                let expected_env_id = env_id!(dirpath);
+                let env = Environment::new(dirpath);
+                let expected_env_id = env.0.clone();
                 let env_dirpath = tempdir().unwrap().into_path();
                 let env_filepath = env_dirpath.join("env");
                 let software1_name = "software1";
@@ -352,7 +357,6 @@ mod test {
                 let cfg = Config::stub()
                     .with_softwares(vec![software1, software2])
                     .with_fs(fs);
-                let env = Environment::new(PathBuf::from("/denv"));
                 env.load(&cfg).unwrap();
                 let path_var = Var::new(
                     PATH_VARNAME.into(),
