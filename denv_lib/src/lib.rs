@@ -32,14 +32,16 @@ impl Environment {
         let mut symlink_errs: Vec<(String, FileSystemError)> = vec![];
         for software in cfg.softwares() {
             let software = software.as_ref();
-            if cfg.fs.is_installed_software(software) {
+            let name = software.name();
+            let version = software.version();
+            if cfg.fs.is_installed_software(name, version) {
                 debug!("{} is already installed", software);
             } else if let Err(err) = software.install(cfg) {
                 error!("Unable to install {}: {}", software, err);
                 install_errs.push((software.to_string(), err));
                 continue;
             }
-            if let Err(err) = cfg.fs.create_bin_symlink(&self.0, software) {
+            if let Err(err) = cfg.fs.create_bin_symlink(&self.0, name, version) {
                 error!("Unable to create symlink for {}: {}", software, err);
                 symlink_errs.push((software.to_string(), err));
                 continue;
@@ -126,22 +128,21 @@ mod test {
                 let software2: Box<dyn Software> = Box::new(software2);
                 let software2_str = software2.to_string();
                 let fs = StubFileSystem::new()
-                    .with_create_bin_symlink_fn(move |env_id, software| {
+                    .with_create_bin_symlink_fn(move |env_id, name, version| {
                         assert_eq!(env_id, epxected_env_id);
-                        assert_eq!(software.name(), software2_name);
-                        assert_eq!(software.version(), software2_version);
+                        assert_eq!(name, software2_name);
+                        assert_eq!(version, software2_version);
                         Err(FileSystemError::new(
                             PathBuf::from("/error"),
                             io::Error::from(io::ErrorKind::PermissionDenied),
                         ))
                     })
-                    .with_is_installed_software_fn(move |software| {
-                        let name = software.name();
+                    .with_is_installed_software_fn(move |name, version| {
                         if name == software1_name {
-                            assert_eq!(software.version(), software1_version);
+                            assert_eq!(version, software1_version);
                             false
                         } else if name == software2_name {
-                            assert_eq!(software.version(), software2_version);
+                            assert_eq!(version, software2_version);
                             true
                         } else {
                             panic!()
@@ -182,26 +183,24 @@ mod test {
                 let fs = StubFileSystem::new()
                     .with_create_bin_symlink_fn({
                         let expected_env_id = expected_env_id.clone();
-                        move |env_id, software| {
-                            let name = software.name();
+                        move |env_id, name, version| {
                             assert_eq!(env_id, expected_env_id);
                             if name == software1_name {
-                                assert_eq!(software.version(), software1_version);
+                                assert_eq!(version, software1_version);
                             } else if name == software2_name {
-                                assert_eq!(software.version(), software2_version);
+                                assert_eq!(version, software2_version);
                             } else {
                                 panic!()
                             }
                             Ok(())
                         }
                     })
-                    .with_is_installed_software_fn(move |software| {
-                        let name = software.name();
+                    .with_is_installed_software_fn(move |name, version| {
                         if name == software1_name {
-                            assert_eq!(software.version(), software1_version);
+                            assert_eq!(version, software1_version);
                             false
                         } else if name == software2_name {
-                            assert_eq!(software.version(), software2_version);
+                            assert_eq!(version, software2_version);
                             true
                         } else {
                             panic!()
@@ -250,26 +249,24 @@ mod test {
                 let fs = StubFileSystem::new()
                     .with_create_bin_symlink_fn({
                         let expected_env_id = expected_env_id.clone();
-                        move |env_id, software| {
-                            let name = software.name();
+                        move |env_id, name, version| {
                             assert_eq!(env_id, expected_env_id);
                             if name == software1_name {
-                                assert_eq!(software.version(), software1_version);
+                                assert_eq!(version, software1_version);
                             } else if name == software2_name {
-                                assert_eq!(software.version(), software2_version);
+                                assert_eq!(version, software2_version);
                             } else {
                                 panic!()
                             }
                             Ok(())
                         }
                     })
-                    .with_is_installed_software_fn(move |software| {
-                        let name = software.name();
+                    .with_is_installed_software_fn(move |name, version| {
                         if name == software1_name {
-                            assert_eq!(software.version(), software1_version);
+                            assert_eq!(version, software1_version);
                             false
                         } else if name == software2_name {
-                            assert_eq!(software.version(), software2_version);
+                            assert_eq!(version, software2_version);
                             true
                         } else {
                             panic!()
@@ -318,26 +315,24 @@ mod test {
                 let fs = StubFileSystem::new()
                     .with_create_bin_symlink_fn({
                         let expected_env_id = expected_env_id.clone();
-                        move |env_id, software| {
-                            let name = software.name();
+                        move |env_id, name, version| {
                             assert_eq!(env_id, expected_env_id);
                             if name == software1_name {
-                                assert_eq!(software.version(), software1_version);
+                                assert_eq!(version, software1_version);
                             } else if name == software2_name {
-                                assert_eq!(software.version(), software2_version);
+                                assert_eq!(version, software2_version);
                             } else {
                                 panic!()
                             }
                             Ok(())
                         }
                     })
-                    .with_is_installed_software_fn(move |software| {
-                        let name = software.name();
+                    .with_is_installed_software_fn(move |name, version| {
                         if name == software1_name {
-                            assert_eq!(software.version(), software1_version);
+                            assert_eq!(version, software1_version);
                             false
                         } else if name == software2_name {
-                            assert_eq!(software.version(), software2_version);
+                            assert_eq!(version, software2_version);
                             true
                         } else {
                             panic!()
