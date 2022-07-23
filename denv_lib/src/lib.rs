@@ -4,9 +4,9 @@ mod internal;
 pub mod software;
 pub mod var;
 
-use crate::{cfg::*, error::*};
+use crate::{cfg::*, error::*, var::*};
 use log::{debug, error, info};
-use std::path::PathBuf;
+use std::{io::Write, path::PathBuf};
 
 macro_rules! env_id {
     ($path:expr) => {{
@@ -17,6 +17,8 @@ macro_rules! env_id {
         hex::encode(sha256)
     }};
 }
+
+const PATH_VARNAME: &str = "PATH";
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Environment(PathBuf);
@@ -52,7 +54,18 @@ impl Environment {
                 symlink_errs,
             });
         }
-        Ok(())
+        let env_dirpath = cfg.fs.env_dirpath(&env_id);
+        let path_var = Var::new(
+            PATH_VARNAME.into(),
+            format!("{}:{}", PATH_VARNAME, env_dirpath.display()),
+        );
+        let (env_filepath, mut env_file) = cfg
+            .fs
+            .create_env_file(&env_id)
+            .map_err(EnvironmentLoadError::EnvFileWritingFailed)?;
+        writeln!(env_file, "{}", path_var.export_statement()).map_err(|err| {
+            EnvironmentLoadError::EnvFileWritingFailed(FileSystemError::new(env_filepath, err))
+        })
     }
 }
 
@@ -60,7 +73,11 @@ impl Environment {
 mod test {
     use super::*;
     use crate::{internal::fs::*, software::*};
-    use std::io;
+    use std::{
+        fs::{read_to_string, File},
+        io,
+    };
+    use tempfile::tempdir;
 
     mod environment {
         use super::*;
@@ -80,7 +97,7 @@ mod test {
             use super::*;
 
             #[test]
-            fn should_return_list_of_errs() {
+            fn should_return_install_failed_err() {
                 let dirpath = PathBuf::from("/denv");
                 let software1_name = "software1";
                 let software1_version = "3.2.1";
@@ -100,8 +117,8 @@ mod test {
                 let software2: Box<dyn Software> = Box::new(software2);
                 let software2_str = software2.to_string();
                 let fs = StubFileSystem::new()
-                    .with_create_bin_symlink_fn(move |dir_id, software| {
-                        assert_eq!(dir_id, env_id!(dirpath));
+                    .with_create_bin_symlink_fn(move |env_id, software| {
+                        assert_eq!(env_id, env_id!(dirpath));
                         assert_eq!(software.name(), software2_name);
                         assert_eq!(software.version(), software2_version);
                         Err(FileSystemError::new(
@@ -135,12 +152,14 @@ mod test {
                         assert_eq!(symlink_errs.len(), 1);
                         assert_eq!(symlink_errs[0].0, software2_str);
                     }
+                    err => panic!("{}", err),
                 }
             }
 
             #[test]
-            fn should_return_ok() {
+            fn should_return_env_file_writing_failed_if_env_file_opening_failed() {
                 let dirpath = PathBuf::from("/denv");
+                let expected_env_id = env_id!(dirpath);
                 let software1_name = "software1";
                 let software1_version = "3.2.1";
                 let software1 = StubSoftware::new(software1_name, software1_version)
@@ -152,17 +171,20 @@ mod test {
                     .with_install_fn(|_| Ok(()));
                 let software2: Box<dyn Software> = Box::new(software2);
                 let fs = StubFileSystem::new()
-                    .with_create_bin_symlink_fn(move |dir_id, software| {
-                        let name = software.name();
-                        assert_eq!(dir_id, env_id!(dirpath));
-                        if name == software1_name {
-                            assert_eq!(software.version(), software1_version);
-                        } else if name == software2_name {
-                            assert_eq!(software.version(), software2_version);
-                        } else {
-                            panic!()
+                    .with_create_bin_symlink_fn({
+                        let expected_env_id = expected_env_id.clone();
+                        move |env_id, software| {
+                            let name = software.name();
+                            assert_eq!(env_id, expected_env_id);
+                            if name == software1_name {
+                                assert_eq!(software.version(), software1_version);
+                            } else if name == software2_name {
+                                assert_eq!(software.version(), software2_version);
+                            } else {
+                                panic!()
+                            }
+                            Ok(())
                         }
-                        Ok(())
                     })
                     .with_is_installed_software_fn(move |software| {
                         let name = software.name();
@@ -175,12 +197,170 @@ mod test {
                         } else {
                             panic!()
                         }
+                    })
+                    .with_env_dirpath_fn({
+                        let expected_env_id = expected_env_id.clone();
+                        move |env_id| {
+                            assert_eq!(env_id, expected_env_id);
+                            PathBuf::from("/env")
+                        }
+                    })
+                    .with_create_env_file_fn(move |env_id| {
+                        assert_eq!(env_id, expected_env_id);
+                        Err(FileSystemError::new(
+                            PathBuf::from("/error"),
+                            io::Error::from(io::ErrorKind::PermissionDenied),
+                        ))
+                    });
+                let cfg = Config::stub()
+                    .with_softwares(vec![software1, software2])
+                    .with_fs(fs);
+                let env = Environment::new(PathBuf::from("/denv"));
+                match env.load(&cfg).unwrap_err() {
+                    EnvironmentLoadError::EnvFileWritingFailed(_) => {}
+                    err => panic!("{}", err),
+                }
+            }
+
+            #[test]
+            fn should_return_env_file_writing_failed_if_env_file_writing_failed() {
+                let dirpath = PathBuf::from("/denv");
+                let expected_env_id = env_id!(dirpath);
+                let env_dirpath = tempdir().unwrap().into_path();
+                let env_filepath = env_dirpath.join("env");
+                let software1_name = "software1";
+                let software1_version = "3.2.1";
+                let software1 = StubSoftware::new(software1_name, software1_version)
+                    .with_install_fn(|_| Ok(()));
+                let software1: Box<dyn Software> = Box::new(software1);
+                let software2_name = "software2";
+                let software2_version = "1.2.3";
+                let software2 = StubSoftware::new(software2_name, software2_version)
+                    .with_install_fn(|_| Ok(()));
+                let software2: Box<dyn Software> = Box::new(software2);
+                let fs = StubFileSystem::new()
+                    .with_create_bin_symlink_fn({
+                        let expected_env_id = expected_env_id.clone();
+                        move |env_id, software| {
+                            let name = software.name();
+                            assert_eq!(env_id, expected_env_id);
+                            if name == software1_name {
+                                assert_eq!(software.version(), software1_version);
+                            } else if name == software2_name {
+                                assert_eq!(software.version(), software2_version);
+                            } else {
+                                panic!()
+                            }
+                            Ok(())
+                        }
+                    })
+                    .with_is_installed_software_fn(move |software| {
+                        let name = software.name();
+                        if name == software1_name {
+                            assert_eq!(software.version(), software1_version);
+                            false
+                        } else if name == software2_name {
+                            assert_eq!(software.version(), software2_version);
+                            true
+                        } else {
+                            panic!()
+                        }
+                    })
+                    .with_env_dirpath_fn({
+                        let expected_env_id = expected_env_id.clone();
+                        move |env_id| {
+                            assert_eq!(env_id, expected_env_id);
+                            env_dirpath.clone()
+                        }
+                    })
+                    .with_create_env_file_fn({
+                        File::create(&env_filepath).unwrap();
+                        move |env_id| {
+                            assert_eq!(env_id, expected_env_id);
+                            Ok((env_filepath.clone(), File::open(&env_filepath).unwrap()))
+                        }
+                    });
+                let cfg = Config::stub()
+                    .with_softwares(vec![software1, software2])
+                    .with_fs(fs);
+                let env = Environment::new(PathBuf::from("/denv"));
+                match env.load(&cfg).unwrap_err() {
+                    EnvironmentLoadError::EnvFileWritingFailed(_) => {}
+                    err => panic!("{}", err),
+                }
+            }
+
+            #[test]
+            fn should_return_ok() {
+                let dirpath = PathBuf::from("/denv");
+                let expected_env_id = env_id!(dirpath);
+                let env_dirpath = tempdir().unwrap().into_path();
+                let env_filepath = env_dirpath.join("env");
+                let software1_name = "software1";
+                let software1_version = "3.2.1";
+                let software1 = StubSoftware::new(software1_name, software1_version)
+                    .with_install_fn(|_| Ok(()));
+                let software1: Box<dyn Software> = Box::new(software1);
+                let software2_name = "software2";
+                let software2_version = "1.2.3";
+                let software2 = StubSoftware::new(software2_name, software2_version)
+                    .with_install_fn(|_| Ok(()));
+                let software2: Box<dyn Software> = Box::new(software2);
+                let fs = StubFileSystem::new()
+                    .with_create_bin_symlink_fn({
+                        let expected_env_id = expected_env_id.clone();
+                        move |env_id, software| {
+                            let name = software.name();
+                            assert_eq!(env_id, expected_env_id);
+                            if name == software1_name {
+                                assert_eq!(software.version(), software1_version);
+                            } else if name == software2_name {
+                                assert_eq!(software.version(), software2_version);
+                            } else {
+                                panic!()
+                            }
+                            Ok(())
+                        }
+                    })
+                    .with_is_installed_software_fn(move |software| {
+                        let name = software.name();
+                        if name == software1_name {
+                            assert_eq!(software.version(), software1_version);
+                            false
+                        } else if name == software2_name {
+                            assert_eq!(software.version(), software2_version);
+                            true
+                        } else {
+                            panic!()
+                        }
+                    })
+                    .with_env_dirpath_fn({
+                        let expected_env_id = expected_env_id.clone();
+                        let env_dirpath = env_dirpath.clone();
+                        move |env_id| {
+                            assert_eq!(env_id, expected_env_id);
+                            env_dirpath.clone()
+                        }
+                    })
+                    .with_create_env_file_fn({
+                        let env_filepath = env_filepath.clone();
+                        move |env_id| {
+                            assert_eq!(env_id, expected_env_id);
+                            Ok((env_filepath.clone(), File::create(&env_filepath).unwrap()))
+                        }
                     });
                 let cfg = Config::stub()
                     .with_softwares(vec![software1, software2])
                     .with_fs(fs);
                 let env = Environment::new(PathBuf::from("/denv"));
                 env.load(&cfg).unwrap();
+                let path_var = Var::new(
+                    PATH_VARNAME.into(),
+                    format!("{}:{}", PATH_VARNAME, env_dirpath.display()),
+                );
+                let env_file_content = read_to_string(env_filepath).unwrap();
+                let expected_env_file_content = format!("{}\n", path_var.export_statement());
+                assert_eq!(env_file_content, expected_env_file_content);
             }
         }
     }

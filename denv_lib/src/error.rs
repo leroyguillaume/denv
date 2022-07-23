@@ -66,12 +66,14 @@ pub enum EnvironmentLoadError {
         install_errs: Vec<(String, InstallError)>,
         symlink_errs: Vec<(String, FileSystemError)>,
     },
+    EnvFileWritingFailed(FileSystemError),
 }
 
 impl Display for EnvironmentLoadError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Self::InstallFailed { .. } => write!(f, "Unable to install some softwares"),
+            Self::EnvFileWritingFailed(err) => write!(f, "Unable to write env file: {}", err),
         }
     }
 }
@@ -313,6 +315,21 @@ mod test {
                         install_errs: vec![],
                         symlink_errs: vec![],
                     };
+                    assert_eq!(err.to_string(), expected);
+                }
+            }
+
+            mod env_file_writing_failed {
+                use super::*;
+
+                #[test]
+                fn should_return_string() {
+                    let err = FileSystemError::new(
+                        PathBuf::from("/error"),
+                        io::Error::from(io::ErrorKind::PermissionDenied),
+                    );
+                    let expected = format!("Unable to write env file: {}", err);
+                    let err = EnvironmentLoadError::EnvFileWritingFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
