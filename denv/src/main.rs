@@ -2,7 +2,11 @@ mod logger;
 
 use clap::Parser;
 use clap_verbosity_flag::Verbosity;
-use denv_lib::{cfg::Config, error::ConfigLoadError, *};
+use denv_lib::{
+    cfg::Config,
+    error::{ConfigLoadError, EnvironmentLoadError},
+    *,
+};
 use home::home_dir;
 use log::error;
 use logger::Logger;
@@ -83,6 +87,10 @@ fn main() {
     let env = Environment::new(cur_dirpath);
     match env.load(&cfg) {
         Ok(()) => exit(exitcode::OK),
+        Err(EnvironmentLoadError::EnvFileWritingFailed(err)) => {
+            error!("Unable to write env file: {}", err);
+            exit(exitcode::IOERR);
+        }
         Err(_) => exit(exitcode::SOFTWARE),
     }
 }
