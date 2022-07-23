@@ -239,7 +239,7 @@ mod test {
                                 move |zip_filepath, filename, _| {
                                 assert_eq!(zip_filepath, expected_zip_filepath);
                                 assert_eq!(filename, SOFTWARE_NAME);
-                                Err(UnzipError::FileOpeningFailed(
+                                Err(UnzipError::FileReadingFailed(
                                     io::Error::from(io::ErrorKind::PermissionDenied)
                                 ))
                             }});

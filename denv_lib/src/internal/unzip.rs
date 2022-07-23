@@ -26,7 +26,7 @@ impl Unzipper for DefaultUnzipper {
         dest: &mut dyn Write,
     ) -> Result<(), UnzipError> {
         debug!("Unzipping {} from {}", filepath, zip_filepath.display());
-        let zip_file = File::open(zip_filepath).map_err(UnzipError::FileOpeningFailed)?;
+        let zip_file = File::open(zip_filepath).map_err(UnzipError::FileReadingFailed)?;
         let zip_file_buf = BufReader::new(zip_file);
         let mut zip = ZipArchive::new(zip_file_buf).map_err(UnzipError::InvalidZipFile)?;
         let mut tgt_file = zip.by_name(filepath).map_err(UnzipError::UnzipFailed)?;
@@ -91,12 +91,12 @@ mod test {
             use super::*;
 
             #[test]
-            fn should_return_file_opening_failed_err() {
+            fn should_return_file_reading_failed_err() {
                 let zip_filepath = temp_dir().join("test");
                 let mut out = vec![];
                 match DefaultUnzipper.unzip(&zip_filepath, "test", &mut out) {
                     Ok(_) => panic!("should fail"),
-                    Err(UnzipError::FileOpeningFailed(_)) => {}
+                    Err(UnzipError::FileReadingFailed(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }

@@ -68,7 +68,7 @@ fn main() {
     });
     let cfg = match Config::load(&cfg_filepath, denv_dirpath, tmp_dirpath) {
         Ok(cfg) => cfg,
-        Err(ConfigLoadError::FileOpeningFailed(err)) => {
+        Err(ConfigLoadError::FileReadingFailed(err)) => {
             error!("Unable to open {}: {}", cfg_filepath.display(), err);
             exit(exitcode::CONFIG);
         }

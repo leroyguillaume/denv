@@ -14,7 +14,7 @@ pub type SupportedSystems = HashMap<&'static str, HashSet<&'static str>>;
 
 #[derive(Debug)]
 pub enum ConfigLoadError {
-    FileOpeningFailed(io::Error),
+    FileReadingFailed(io::Error),
     InvalidYaml(serde_yaml::Error),
     InvalidConfig(Vec<String>),
 }
@@ -22,7 +22,7 @@ pub enum ConfigLoadError {
 impl Display for ConfigLoadError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::FileOpeningFailed(err) => write!(f, "{}", err),
+            Self::FileReadingFailed(err) => write!(f, "{}", err),
             Self::InvalidYaml(err) => write!(f, "Invalid YAML syntax: {}", err),
             Self::InvalidConfig(_) => write!(f, "Invalid configuration file"),
         }
@@ -164,7 +164,7 @@ impl Display for InstallError {
 
 #[derive(Debug)]
 pub enum UnzipError {
-    FileOpeningFailed(io::Error),
+    FileReadingFailed(io::Error),
     InvalidZipFile(ZipError),
     UnzipFailed(ZipError),
     DestinationWritingFailed(io::Error),
@@ -173,7 +173,7 @@ pub enum UnzipError {
 impl Display for UnzipError {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
-            Self::FileOpeningFailed(err) => write!(f, "{}", err),
+            Self::FileReadingFailed(err) => write!(f, "{}", err),
             Self::InvalidZipFile(err) => write!(f, "{}", err),
             Self::UnzipFailed(err) => write!(f, "{}", err),
             Self::DestinationWritingFailed(err) => write!(f, "{}", err),
@@ -209,14 +209,14 @@ mod test {
         mod to_string {
             use super::*;
 
-            mod file_opening_failed {
+            mod file_reading_failed {
                 use super::*;
 
                 #[test]
                 fn should_return_string() {
                     let err = io::Error::from(io::ErrorKind::PermissionDenied);
                     let expected = err.to_string();
-                    let err = ConfigLoadError::FileOpeningFailed(err);
+                    let err = ConfigLoadError::FileReadingFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }
@@ -438,7 +438,7 @@ mod test {
                 fn should_return_string() {
                     let zip_filepath = PathBuf::from("/error");
                     let filepath = "file";
-                    let err = UnzipError::FileOpeningFailed(io::Error::from(
+                    let err = UnzipError::FileReadingFailed(io::Error::from(
                         io::ErrorKind::PermissionDenied,
                     ));
                     let expected = format!(
@@ -460,14 +460,14 @@ mod test {
         mod to_string {
             use super::*;
 
-            mod file_opening_failed {
+            mod file_reading_failed {
                 use super::*;
 
                 #[test]
                 fn should_return_string() {
                     let err = io::Error::from(io::ErrorKind::PermissionDenied);
                     let expected = err.to_string();
-                    let err = UnzipError::FileOpeningFailed(err);
+                    let err = UnzipError::FileReadingFailed(err);
                     assert_eq!(err.to_string(), expected);
                 }
             }

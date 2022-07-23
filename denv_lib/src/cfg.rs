@@ -31,7 +31,7 @@ impl Config {
         tmp_dirpath: PathBuf,
     ) -> Result<Self, ConfigLoadError> {
         debug!("Loading configuration from {}", filepath.display());
-        let cfg = read_to_string(filepath).map_err(ConfigLoadError::FileOpeningFailed)?;
+        let cfg = read_to_string(filepath).map_err(ConfigLoadError::FileReadingFailed)?;
         let cfg = serde_yaml::from_str::<serde_json::Value>(&cfg)
             .map_err(ConfigLoadError::InvalidYaml)?;
         let schema = include_str!("../config.schema.json");
@@ -106,14 +106,14 @@ mod test {
             use super::*;
 
             #[test]
-            fn should_return_file_opening_failed() {
+            fn should_return_file_reading_failed() {
                 match Config::load(
                     Path::new("denv.yaml"),
                     PathBuf::from(".denv"),
                     PathBuf::from("/tmp/denv"),
                 ) {
                     Ok(_) => panic!("should fail"),
-                    Err(ConfigLoadError::FileOpeningFailed(_)) => {}
+                    Err(ConfigLoadError::FileReadingFailed(_)) => {}
                     Err(err) => panic!("{}", err),
                 }
             }
