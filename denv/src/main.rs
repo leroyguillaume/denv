@@ -22,6 +22,9 @@ struct Args {
     #[clap(long = "denv-directory", name = "DENV_DIR", help = "D-Env directory")]
     denv_dirpath: Option<PathBuf>,
 
+    #[clap(short = 'p', long = "path", help = "Display environment path")]
+    display_env_dirpath: bool,
+
     #[clap(
         short = 'f',
         long = "config",
@@ -86,7 +89,12 @@ fn main() {
     };
     let env = Environment::new(cur_dirpath);
     match env.load(&cfg) {
-        Ok(()) => exit(exitcode::OK),
+        Ok(()) => {
+            if args.display_env_dirpath {
+                println!("{}", env.path(&cfg).display());
+            }
+            exit(exitcode::OK)
+        }
         Err(EnvironmentLoadError::EnvFileWritingFailed(err)) => {
             error!("Unable to write env file: {}", err);
             exit(exitcode::IOERR);
