@@ -65,6 +65,10 @@ impl Environment {
             EnvironmentLoadError::EnvFileWritingFailed(FileSystemError::new(env_filepath, err))
         })
     }
+
+    pub fn path(&self, cfg: &Config) -> PathBuf {
+        cfg.fs.env_dirpath(&self.0)
+    }
 }
 
 #[cfg(test)]
@@ -365,6 +369,26 @@ mod test {
                 let env_file_content = read_to_string(env_filepath).unwrap();
                 let expected_env_file_content = format!("{}\n", path_var.export_statement());
                 assert_eq!(env_file_content, expected_env_file_content);
+            }
+        }
+
+        mod path {
+            use super::*;
+
+            #[test]
+            fn should_return_path() {
+                let env = Environment::new(PathBuf::from("/denv"));
+                let expected_env_id = env.0.clone();
+                let expected = PathBuf::from("/env");
+                let fs = StubFileSystem::new().with_env_dirpath_fn({
+                    let expected = expected.clone();
+                    move |env_id| {
+                        assert_eq!(env_id, expected_env_id);
+                        expected.clone()
+                    }
+                });
+                let cfg = Config::stub().with_fs(fs);
+                assert_eq!(env.path(&cfg), expected);
             }
         }
     }
