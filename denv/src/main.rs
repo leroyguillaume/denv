@@ -19,6 +19,9 @@ use std::{
 #[derive(Parser)]
 #[clap(name = "D-Env", author, version, about)]
 struct Args {
+    #[clap(long = "denv-directory", name = "DENV_DIR", help = "D-Env directory")]
+    denv_dirpath: Option<PathBuf>,
+
     #[clap(
         short = 'f',
         long = "config",
@@ -27,11 +30,8 @@ struct Args {
     )]
     cfg_filepath: Option<PathBuf>,
 
-    #[clap(long, help = "Disable logs color")]
-    no_color: bool,
-
-    #[clap(long = "denv-directory", name = "DENV_DIR", help = "D-Env directory")]
-    denv_dirpath: Option<PathBuf>,
+    #[clap(long = "no-color", help = "Disable logs color")]
+    logs_color_disabled: bool,
 
     #[clap(long = "tmp-directory", name = "TMP_DIR", help = "Temporary directory")]
     tmp_dirpath: Option<PathBuf>,
@@ -57,7 +57,7 @@ fn main() {
         }
     });
     let tmp_dirpath = args.tmp_dirpath.unwrap_or_else(|| temp_dir().join("denv"));
-    Logger::init(args.verbose.log_level_filter(), !args.no_color).unwrap();
+    Logger::init(args.verbose.log_level_filter(), !args.logs_color_disabled).unwrap();
     let cfg_filepath = args.cfg_filepath.unwrap_or_else(|| {
         let path = PathBuf::from("denv.yml");
         if path.exists() {

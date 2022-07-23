@@ -2,7 +2,7 @@ use log::{
     set_boxed_logger, set_max_level, Level, LevelFilter, Log, Metadata, Record, SetLoggerError,
 };
 use std::{
-    io::{self, Stdout, Write},
+    io::{self, Stderr, Write},
     sync::Mutex,
 };
 
@@ -29,9 +29,9 @@ impl<W: Write + Sync + Send> Logger<W> {
     }
 }
 
-impl Logger<Stdout> {
+impl Logger<Stderr> {
     pub fn init(lvl: LevelFilter, with_color: bool) -> Result<(), SetLoggerError> {
-        set_boxed_logger(Box::new(Self::new(lvl, with_color, io::stdout())))?;
+        set_boxed_logger(Box::new(Self::new(lvl, with_color, io::stderr())))?;
         set_max_level(lvl);
         Ok(())
     }
