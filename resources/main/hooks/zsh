@@ -1,0 +1,18 @@
+_denv_hook() {
+  if [ ! -z "${<denv_cwd_var_name>}" ] && [[ ! "$(pwd)" == ${<denv_cwd_var_name>}* ]]; then
+    script=$(<unload_cmd>)
+    if [ $? -eq 0 ]; then
+      eval "${script}"
+    fi
+  fi
+  if [ -f denv.yml ] || [ -f denv.yaml ]; then
+    script=$(<load_cmd>)
+      if [ $? -eq 0 ]; then
+        eval "${script}"
+      fi
+  fi
+}
+
+if [[ -z ${chpwd_functions[(r)_denv_hook]} ]]; then
+  chpwd_functions=( _denv_hook ${chpwd_functions[@]} )
+fi

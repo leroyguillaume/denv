@@ -1,13 +1,34 @@
 // IMPORTS
 
-use clap::{Args, Parser};
+use clap::{Args, Parser, Subcommand};
 use log::LevelFilter;
+
+// ENUMS
+
+#[derive(Clone, Debug, Eq, PartialEq, Subcommand)]
+pub enum Command {
+    #[clap(subcommand)]
+    Hook(Shell),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Subcommand)]
+#[clap(about = "Print shell hook statement")]
+pub enum Shell {
+    #[clap(about = "Print bash hook statement")]
+    Bash,
+
+    #[clap(about = "Print ZSH hook statement")]
+    Zsh,
+}
 
 // DATA STRUCTS
 
 #[derive(Clone, Debug, Eq, PartialEq, Parser)]
 #[clap(name = "D-Env", author, version, about)]
 pub struct Cli {
+    #[clap(subcommand)]
+    pub cmd: Command,
+
     #[clap(flatten)]
     pub opts: Options,
 }

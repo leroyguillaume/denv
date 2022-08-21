@@ -1,0 +1,21 @@
+_denv_hook() {
+  cmd=$(history 1 | cut -c 7- | awk '{print $1}')
+  if [ "${cmd}" == "cd" ]; then
+    if [ ! -z "${<denv_cwd_var_name>}" ] && [[ ! "$(pwd)" == ${<denv_cwd_var_name>}* ]]; then
+      script=$(<unload_cmd>)
+      if [ $? -eq 0 ]; then
+        eval "${script}"
+      fi
+    fi
+    if [ -f denv.yml ] || [ -f denv.yaml ]; then
+      script=$(<load_cmd>)
+      if [ $? -eq 0 ]; then
+        eval "${script}"
+      fi
+    fi
+  fi
+}
+
+if ! [[ "${PROMPT_COMMAND:-}" =~ _denv_hook ]]; then
+  PROMPT_COMMAND="_denv_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+fi
