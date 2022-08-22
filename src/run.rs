@@ -145,7 +145,13 @@ mod error_test {
 #[cfg(test)]
 mod runner_test {
     use super::*;
-    use crate::{cfg::StubConfigLoader, test::WriteFailer};
+    use crate::{
+        cfg::{
+            SoftwareDefinition, SoftwareDefinitionKind, StubConfigLoader, VarDefinition,
+            VarDefinitionKind,
+        },
+        test::WriteFailer,
+    };
 
     mod run {
         use super::*;
@@ -215,7 +221,7 @@ mod runner_test {
             ) {
                 let runner = Runner {
                     args_fn: Box::new(move || args.clone()),
-                    cfg_loader: Box::new(StubConfigLoader),
+                    cfg_loader: Box::new(StubConfigLoader::default()),
                     out: Mutex::new(out),
                 };
                 let res = runner.run(Command::Hook(shell), Options::default());
@@ -232,6 +238,86 @@ mod runner_test {
                     .replace("<load_cmd>", &cli)
                     .replace("<unload_cmd>", &format!("{} unload", cli));
                 assert_eq!(out, statement);
+            }
+        }
+
+        mod load {
+            use super::*;
+
+            struct Data {
+                cfg: Config,
+                opts: Options,
+            }
+
+            impl Default for Data {
+                fn default() -> Self {
+                    Self {
+                        cfg: Config {
+                            path: PathBuf::from("/config"),
+                            soft_defs: vec![SoftwareDefinition {
+                                kind: SoftwareDefinitionKind::Terraform,
+                                version: "1.2.3".into(),
+                            }],
+                            var_defs: vec![VarDefinition {
+                                kind: VarDefinitionKind::Literal("value".into()),
+                                name: "var".into(),
+                            }],
+                        },
+                        opts: Options {
+                            cfg_filepath: Some(PathBuf::from("/config")),
+                            ..Options::default()
+                        },
+                    }
+                }
+            }
+
+            struct Stubs {
+                cfg_loader: StubConfigLoader,
+            }
+
+            impl Stubs {
+                fn new(data: &Data) -> Self {
+                    let cfg = data.cfg.clone();
+                    let cfg_path = cfg.path.clone();
+                    let mut stubs = Self {
+                        cfg_loader: StubConfigLoader::default(),
+                    };
+                    stubs.cfg_loader.with_load_fn(move |path| {
+                        assert_eq!(path, cfg_path);
+                        Ok(cfg.clone())
+                    });
+                    stubs
+                }
+            }
+
+            #[test]
+            fn should_return_config_err() {
+                let data = Data::default();
+                let mut stubs = Stubs::new(&data);
+                stubs
+                    .cfg_loader
+                    .with_load_fn(|_| Err(cfg::Error::Version(None)));
+                test(vec![], data.opts, stubs, |_, res| match res.unwrap_err() {
+                    Error::Config(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[inline]
+            fn test<W: Write, F: Fn(W, Result<()>)>(
+                out: W,
+                opts: Options,
+                stubs: Stubs,
+                assert_fn: F,
+            ) {
+                let runner = Runner {
+                    args_fn: Box::new(|| env::args().collect()),
+                    cfg_loader: Box::new(stubs.cfg_loader),
+                    out: Mutex::new(out),
+                };
+                let res = runner.run(Command::Load, opts);
+                let out = runner.out.into_inner().unwrap();
+                assert_fn(out, res);
             }
         }
     }

@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "stub_trait"]
+
 [package]
 name = "denv"
 version = "0.1.0"
@@ -11,3 +14,6 @@ jsonschema = { version = "0.16", default-features = false, features = ["resolve-
 log = { version = "0.4", features = ["std"] }
 serde_json = "1.0"
 serde_yaml = "0.8"
+
+[dev-dependencies]
+stub_trait = { path = "stub_trait" }

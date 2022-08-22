@@ -9,6 +9,8 @@ use std::{
     io,
     path::PathBuf,
 };
+#[cfg(test)]
+use stub_trait::stub;
 
 // MACROS
 
@@ -88,6 +90,7 @@ pub struct VarDefinition {
 
 // TRAITS
 
+#[cfg_attr(test, stub)]
 pub trait ConfigLoader {
     fn load(&self, path: PathBuf) -> Result;
 }
@@ -155,16 +158,6 @@ impl ConfigLoader for DefaultConfigLoader {
             "v1" => Self::load_v1(path, json),
             _ => Err(Error::Version(Some(json_version.clone()))),
         }
-    }
-}
-
-#[cfg(test)]
-pub struct StubConfigLoader;
-
-#[cfg(test)]
-impl ConfigLoader for StubConfigLoader {
-    fn load(&self, _path: PathBuf) -> Result {
-        unimplemented!();
     }
 }
 
