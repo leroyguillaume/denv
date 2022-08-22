@@ -1,0 +1,46 @@
+{
+    "title": "D-Env",
+    "description": "D-Env configuration file",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "set": {
+            "description": "Define environment variables",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "oneOf": [
+                    {
+                        "required": ["name", "value"]
+                    }
+                ],
+                "properties": {
+                    "name": {
+                        "description": "Variable name",
+                        "type": "string"
+                    },
+                    "value": {
+                        "description": "Literal value",
+                        "type": ["boolean", "integer", "number", "string"]
+                    }
+                }
+            }
+        },
+        "softwares": {
+            "description": "Define software versions",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "terraform": {
+                    "description": "terraform version",
+                    "type": "string"
+                }
+            }
+        },
+        "version": {
+            "description": "Configuration file version",
+            "type": "string"
+        }
+    }
+}

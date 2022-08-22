@@ -2,6 +2,7 @@
 
 use clap::{Args, Parser, Subcommand};
 use log::LevelFilter;
+use std::path::PathBuf;
 
 // ENUMS
 
@@ -9,6 +10,9 @@ use log::LevelFilter;
 pub enum Command {
     #[clap(subcommand)]
     Hook(Shell),
+
+    #[clap(about = "Print shell export statements")]
+    Load,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Subcommand)]
@@ -35,6 +39,9 @@ pub struct Cli {
 
 #[derive(Args, Clone, Debug, Default, Eq, PartialEq)]
 pub struct Options {
+    #[clap(short = 'f', long = "config", help = "Override configuration file")]
+    pub cfg_filepath: Option<PathBuf>,
+
     #[clap(long, help = "Disable logs color")]
     pub no_color: bool,
 

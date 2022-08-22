@@ -1,10 +1,14 @@
 // IMPORTS
 
-use crate::cli::{Command, Shell};
+use crate::{
+    cfg::{self, Config, ConfigLoader, DefaultConfigLoader},
+    cli::{Command, Options, Shell},
+};
 use std::{
     env,
     fmt::{self, Display, Formatter},
     io::{self, Stdout, Write},
+    path::PathBuf,
     sync::Mutex,
 };
 
@@ -30,12 +34,14 @@ const DENV_CWD_VAR_NAME: &str = "DENV_CWD";
 
 #[derive(Debug)]
 pub enum Error {
+    Config(cfg::Error),
     Io(io::Error),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
+            Self::Config(err) => std::write!(f, "Unable to load configuration: {}", err),
             Self::Io(err) => std::write!(f, "{}", err),
         }
     }
@@ -45,14 +51,22 @@ impl Display for Error {
 
 pub struct Runner<W: Write> {
     args_fn: Box<ArgsFn>,
+    cfg_loader: Box<dyn ConfigLoader>,
     out: Mutex<W>,
 }
 
 impl<W: Write> Runner<W> {
-    pub fn run(&self, cmd: Command) -> Result<()> {
+    pub fn run(&self, cmd: Command, opts: Options) -> Result<()> {
         match cmd {
             Command::Hook(shell) => self.run_hook(shell),
+            Command::Load => self.run_load(opts),
         }
+    }
+
+    #[inline]
+    fn load_config(&self, path: Option<PathBuf>) -> Result<Config> {
+        let path = path.unwrap_or_else(|| PathBuf::from("denv.yml"));
+        self.cfg_loader.load(path).map_err(Error::Config)
     }
 
     #[inline]
@@ -75,12 +89,19 @@ impl<W: Write> Runner<W> {
         let mut out = self.out.lock().unwrap();
         write!(out, "{}", statement)
     }
+
+    #[inline]
+    fn run_load(&self, opts: Options) -> Result<()> {
+        let _ = self.load_config(opts.cfg_filepath)?;
+        unimplemented!();
+    }
 }
 
 impl Default for Runner<Stdout> {
     fn default() -> Self {
         Self {
             args_fn: Box::new(|| env::args().collect()),
+            cfg_loader: Box::new(DefaultConfigLoader),
             out: Mutex::new(io::stdout()),
         }
     }
@@ -93,6 +114,18 @@ mod error_test {
     use super::*;
 
     mod to_string {
+
+        mod config {
+            use super::*;
+
+            #[test]
+            fn should_return_str() {
+                let err = cfg::Error::Version(None);
+                let str = format!("Unable to load configuration: {}", err);
+                let err = Error::Config(err);
+                assert_eq!(err.to_string(), str);
+            }
+        }
         use super::*;
 
         mod io {
@@ -112,7 +145,7 @@ mod error_test {
 #[cfg(test)]
 mod runner_test {
     use super::*;
-    use crate::test::WriteFailer;
+    use crate::{cfg::StubConfigLoader, test::WriteFailer};
 
     mod run {
         use super::*;
@@ -128,19 +161,14 @@ mod runner_test {
                         #[test]
                         fn should_return_io_err() {
                             test(
-                                Command::Hook($shell),
+                                $shell,
                                 WriteFailer,
-                                Data {
-                                    args: vec![
-                                        "denv".into(),
-                                        "hook".into(),
-                                        stringify!($ident).into(),
-                                    ],
-                                },
-                                |_, _, res| {
+                                vec!["denv".into(), "hook".into(), stringify!($ident).into()],
+                                |_, res| {
                                     let err = res.unwrap_err();
                                     match err {
                                         Error::Io(_) => {}
+                                        err => panic!("{}", err),
                                     }
                                 },
                             );
@@ -150,41 +178,26 @@ mod runner_test {
                         fn should_return_ok_with_opts() {
                             let opt1 = "-vvvv";
                             let opt2 = "--no-color";
-                            test(
-                                Command::Hook($shell),
-                                vec![],
-                                Data {
-                                    args: vec![
-                                        "denv".into(),
-                                        opt1.into(),
-                                        opt2.into(),
-                                        "hook".into(),
-                                        stringify!($ident).into(),
-                                    ],
-                                },
-                                |data, out, res| {
-                                    let cli = format!("{} {} {}", data.args[0], opt1, opt2);
-                                    verify(out, res, cli, include_str!($template));
-                                },
-                            );
+                            let args = vec![
+                                "denv".into(),
+                                opt1.into(),
+                                opt2.into(),
+                                "hook".into(),
+                                stringify!($ident).into(),
+                            ];
+                            test($shell, vec![], args.clone(), |out, res| {
+                                let cli = format!("{} {} {}", args[0], opt1, opt2);
+                                verify(out, res, cli, include_str!($template));
+                            });
                         }
 
                         #[test]
                         fn should_return_ok_without_opts() {
-                            test(
-                                Command::Hook($shell),
-                                vec![],
-                                Data {
-                                    args: vec![
-                                        "denv".into(),
-                                        "hook".into(),
-                                        stringify!($ident).into(),
-                                    ],
-                                },
-                                |data, out, res| {
-                                    verify(out, res, data.args[0].clone(), include_str!($template));
-                                },
-                            );
+                            let args =
+                                vec!["denv".into(), "hook".into(), stringify!($ident).into()];
+                            test($shell, vec![], args.clone(), |out, res| {
+                                verify(out, res, args[0].clone(), include_str!($template));
+                            });
                         }
                     }
                 };
@@ -192,6 +205,23 @@ mod runner_test {
 
             tests!(bash, Shell::Bash, "../resources/main/hooks/bash");
             tests!(zsh, Shell::Zsh, "../resources/main/hooks/zsh");
+
+            #[inline]
+            fn test<W: Write, F: Fn(W, Result<()>)>(
+                shell: Shell,
+                out: W,
+                args: Vec<String>,
+                assert_fn: F,
+            ) {
+                let runner = Runner {
+                    args_fn: Box::new(move || args.clone()),
+                    cfg_loader: Box::new(StubConfigLoader),
+                    out: Mutex::new(out),
+                };
+                let res = runner.run(Command::Hook(shell), Options::default());
+                let out = runner.out.into_inner().unwrap();
+                assert_fn(out, res);
+            }
 
             #[inline]
             fn verify(out: Vec<u8>, res: Result<()>, cli: String, template: &str) {
@@ -203,28 +233,6 @@ mod runner_test {
                     .replace("<unload_cmd>", &format!("{} unload", cli));
                 assert_eq!(out, statement);
             }
-        }
-
-        #[derive(Default)]
-        struct Data {
-            args: Vec<String>,
-        }
-
-        #[inline]
-        fn test<W: Write, F: Fn(Data, W, Result<()>)>(
-            cmd: Command,
-            out: W,
-            data: Data,
-            assert_fn: F,
-        ) {
-            let args = data.args.clone();
-            let runner = Runner {
-                args_fn: Box::new(move || args.clone()),
-                out: Mutex::new(out),
-            };
-            let res = runner.run(cmd);
-            let out = runner.out.into_inner().unwrap();
-            assert_fn(data, out, res);
         }
     }
 }

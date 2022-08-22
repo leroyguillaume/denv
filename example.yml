@@ -1,0 +1,12 @@
+version: v1
+softwares:
+  terraform: 1.2.3
+set:
+  - name: VAR_STR
+    value: value
+  - name: VAR_INT
+    value: 1
+  - name: VAR_NB
+    value: 1.1
+  - name: VAR_BOOL
+    value: true
