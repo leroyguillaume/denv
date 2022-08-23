@@ -8,10 +8,13 @@ use run::Runner;
 
 mod cfg;
 mod cli;
+mod fs;
 mod log;
 mod run;
+mod soft;
 #[cfg(test)]
 mod test;
+mod var;
 
 // FUNTIONS
 

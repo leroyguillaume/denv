@@ -1,5 +1,9 @@
 // IMPORTS
 
+use crate::{
+    soft::{tf::Terraform, Software},
+    var::{Literal, Var},
+};
 use jsonschema::JSONSchema;
 use log::debug;
 use serde_json::Value;
@@ -7,7 +11,7 @@ use std::{
     fmt::{self, Display, Formatter},
     fs::File,
     io,
-    path::PathBuf,
+    path::Path,
 };
 #[cfg(test)]
 use stub_trait::stub;
@@ -71,7 +75,6 @@ pub enum VarDefinitionKind {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config {
-    pub path: PathBuf,
     pub soft_defs: Vec<SoftwareDefinition>,
     pub var_defs: Vec<VarDefinition>,
 }
@@ -82,17 +85,33 @@ pub struct SoftwareDefinition {
     pub version: String,
 }
 
+impl SoftwareDefinition {
+    pub fn into_software(self) -> Box<dyn Software> {
+        match self.kind {
+            SoftwareDefinitionKind::Terraform => Box::new(Terraform::new(self.version)),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VarDefinition {
     pub kind: VarDefinitionKind,
     pub name: String,
 }
 
+impl VarDefinition {
+    pub fn into_var(self) -> Box<dyn Var> {
+        match self.kind {
+            VarDefinitionKind::Literal(value) => Box::new(Literal::new(self.name, value)),
+        }
+    }
+}
+
 // TRAITS
 
 #[cfg_attr(test, stub)]
 pub trait ConfigLoader {
-    fn load(&self, path: PathBuf) -> Result;
+    fn load(&self, path: &Path) -> Result;
 }
 
 // STRUCTS
@@ -101,7 +120,7 @@ pub struct DefaultConfigLoader;
 
 impl DefaultConfigLoader {
     #[inline]
-    fn load_v1(path: PathBuf, json: Value) -> Result {
+    fn load_v1(json: Value) -> Result {
         let schema = include_str!("../resources/main/config/v1.schema.json");
         let schema: Value = serde_json::from_str(schema).unwrap();
         let schema = JSONSchema::compile(&schema).unwrap();
@@ -110,7 +129,6 @@ impl DefaultConfigLoader {
             return Err(err);
         }
         let mut config = Config {
-            path,
             soft_defs: vec![],
             var_defs: vec![],
         };
@@ -146,7 +164,7 @@ impl DefaultConfigLoader {
 }
 
 impl ConfigLoader for DefaultConfigLoader {
-    fn load(&self, path: PathBuf) -> Result {
+    fn load(&self, path: &Path) -> Result {
         debug!("Loading configuration from {}", path.display());
         let file = File::open(&path).map_err(Error::Io)?;
         let json: Value = serde_yaml::from_reader(file).map_err(Error::YamlSyntax)?;
@@ -155,7 +173,7 @@ impl ConfigLoader for DefaultConfigLoader {
             .as_str()
             .ok_or_else(|| Error::Version(Some(json_version.clone())))?;
         match version {
-            "v1" => Self::load_v1(path, json),
+            "v1" => Self::load_v1(json),
             _ => Err(Error::Version(Some(json_version.clone()))),
         }
     }
@@ -231,6 +249,60 @@ mod error_test {
 }
 
 #[cfg(test)]
+mod software_definition {
+    use super::*;
+    use crate::soft::Kind;
+
+    mod into_software {
+        use super::*;
+
+        #[test]
+        fn should_return_terraform() {
+            test(SoftwareDefinitionKind::Terraform, |kind| match kind {
+                Kind::Terraform(_) => {}
+            });
+        }
+
+        #[inline]
+        fn test<F: Fn(Kind)>(kind: SoftwareDefinitionKind, assert_fn: F) {
+            let version = "1.2.3";
+            let soft_def = SoftwareDefinition {
+                kind,
+                version: version.into(),
+            };
+            let soft = soft_def.into_software();
+            assert_eq!(soft.version(), version);
+            assert_fn(soft.kind());
+        }
+    }
+}
+
+#[cfg(test)]
+mod var_definition {
+    use super::*;
+    use crate::var::Kind;
+
+    mod into_var {
+        use super::*;
+
+        #[test]
+        fn should_return_literal() {
+            let name = "var";
+            let value = "value";
+            let var_def = VarDefinition {
+                kind: VarDefinitionKind::Literal(value.into()),
+                name: name.into(),
+            };
+            let var = var_def.into_var();
+            assert_eq!(var.name(), name);
+            match var.kind() {
+                Kind::Literal(var) => assert_eq!(var.value(), value),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod default_config_loader_test {
     use super::*;
     use std::path::Path;
@@ -292,7 +364,6 @@ mod default_config_loader_test {
             let path = Path::new("resources/test/config/v1.yml");
             test(path, |res| {
                 let cfg = Config {
-                    path: path.to_path_buf(),
                     soft_defs: vec![SoftwareDefinition {
                         kind: SoftwareDefinitionKind::Terraform,
                         version: "1.2.3".into(),
@@ -323,7 +394,7 @@ mod default_config_loader_test {
         #[inline]
         fn test<F: Fn(Result)>(path: &Path, assert_fn: F) {
             let loader = DefaultConfigLoader;
-            let res = loader.load(path.to_path_buf());
+            let res = loader.load(path);
             assert_fn(res);
         }
     }

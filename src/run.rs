@@ -1,14 +1,18 @@
 // IMPORTS
 
 use crate::{
-    cfg::{self, Config, ConfigLoader, DefaultConfigLoader},
+    cfg::{self, ConfigLoader, DefaultConfigLoader, SoftwareDefinition, VarDefinition},
     cli::{Command, Options, Shell},
+    fs::{DefaultFileSystem, FileSystem},
+    soft::{Error as SoftwareError, Software},
+    var::{Error as VarError, Var},
 };
+use log::debug;
 use std::{
     env,
-    fmt::{self, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     io::{self, Stdout, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Mutex,
 };
 
@@ -20,28 +24,45 @@ macro_rules! write {
     }};
 }
 
+macro_rules! writeln {
+    ($out:expr, $($arg:tt)*) => {{
+        std::writeln!($out, $($arg)*).map_err(|err| Error::Io(err))
+    }};
+}
+
 // TYPES
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 type ArgsFn = dyn Fn() -> Vec<String>;
 
+type CreateFsFn = dyn Fn() -> Box<dyn FileSystem>;
+
+type EnvVarFn = dyn Fn(&str) -> std::result::Result<String, env::VarError>;
+
 // CONSTS
 
+const DENV_CFG_FILE_VAR_NAME: &str = "DENV_CONFIG_FILE";
 const DENV_CWD_VAR_NAME: &str = "DENV_CWD";
+const DENV_PATH_BACKUP_VAR_NAME: &str = "DENV_PATH_BACKUP";
+const PATH_VAR_NAME: &str = "PATH";
 
 // ENUMS
 
 #[derive(Debug)]
 pub enum Error {
+    Compute(Vec<ComputeError>),
     Config(cfg::Error),
+    Install(Vec<InstallError>),
     Io(io::Error),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
+            Self::Compute(_) => std::write!(f, "Unable to compute value of some variables"),
             Self::Config(err) => std::write!(f, "Unable to load configuration: {}", err),
+            Self::Install(_) => std::write!(f, "Unable to install some softwares"),
             Self::Io(err) => std::write!(f, "{}", err),
         }
     }
@@ -49,9 +70,40 @@ impl Display for Error {
 
 // STRUCTS
 
+pub struct ComputeError {
+    cause: VarError,
+    var: Box<dyn Var>,
+}
+
+impl Debug for ComputeError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.debug_struct("ComputeError")
+            .field("cause", &self.cause)
+            .field("var", &self.var.name())
+            .finish()
+    }
+}
+
+pub struct InstallError {
+    cause: SoftwareError,
+    soft: Box<dyn Software>,
+}
+
+impl Debug for InstallError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let soft_str = format!("{} v{}", self.soft.name(), self.soft.version());
+        f.debug_struct("InstallError")
+            .field("cause", &self.cause)
+            .field("soft", &soft_str)
+            .finish()
+    }
+}
+
 pub struct Runner<W: Write> {
     args_fn: Box<ArgsFn>,
     cfg_loader: Box<dyn ConfigLoader>,
+    create_fs_fn: Box<CreateFsFn>,
+    env_var_fn: Box<EnvVarFn>,
     out: Mutex<W>,
 }
 
@@ -64,9 +116,88 @@ impl<W: Write> Runner<W> {
     }
 
     #[inline]
-    fn load_config(&self, path: Option<PathBuf>) -> Result<Config> {
-        let path = path.unwrap_or_else(|| PathBuf::from("denv.yml"));
-        self.cfg_loader.load(path).map_err(Error::Config)
+    fn install_softwares(
+        &self,
+        env_path: &Path,
+        soft_defs: Vec<SoftwareDefinition>,
+        fs: &dyn FileSystem,
+    ) -> Result<()> {
+        let mut install_errs = vec![];
+        for soft_def in soft_defs {
+            let soft = soft_def.into_software();
+            let bin_paths = soft.binary_paths(fs);
+            let install_res = if soft.is_installed(fs) {
+                debug!("{} v{} is already installed", soft.name(), soft.version());
+                Ok(())
+            } else {
+                soft.install(fs)
+                    .map_err(|err| InstallError { cause: err, soft })
+            };
+            match install_res {
+                Err(err) => install_errs.push(err),
+                Ok(_) => {
+                    for bin_path in bin_paths {
+                        let filename = bin_path.file_name().unwrap();
+                        let dest = env_path.join(filename);
+                        fs.ensure_symlink(&bin_path, &dest).map_err(Error::Io)?;
+                    }
+                }
+            }
+        }
+        if install_errs.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::Install(install_errs))
+        }
+    }
+
+    #[inline]
+    fn print_export_statements(
+        &self,
+        env_path: &Path,
+        cfg_path: &Path,
+        var_defs: Vec<VarDefinition>,
+        fs: &dyn FileSystem,
+    ) -> Result<()> {
+        let cwd = fs.cwd().map_err(Error::Io)?;
+        let mut out = self.out.lock().unwrap();
+        writeln!(out, "export {}='{}'", DENV_CWD_VAR_NAME, cwd.display())?;
+        writeln!(
+            out,
+            "export {}='{}'",
+            DENV_CFG_FILE_VAR_NAME,
+            cfg_path.display()
+        )?;
+        writeln!(
+            out,
+            "export {}='{}'",
+            DENV_PATH_BACKUP_VAR_NAME,
+            (self.env_var_fn)(PATH_VAR_NAME).unwrap_or_default(),
+        )?;
+        writeln!(
+            out,
+            "export {}=\"{}:${{{}}}\"",
+            PATH_VAR_NAME,
+            env_path.display(),
+            PATH_VAR_NAME
+        )?;
+        let mut compute_errs = vec![];
+        for var_def in var_defs {
+            let var = var_def.into_var();
+            let var_name: String = var.name().into();
+            let compute_res = var
+                .compute_value()
+                .map_err(|err| ComputeError { cause: err, var });
+            match compute_res {
+                Err(err) => compute_errs.push(err),
+                Ok(value) => writeln!(out, "export {}='{}'", var_name, value,)?,
+            }
+        }
+        if compute_errs.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::Compute(compute_errs))
+        }
     }
 
     #[inline]
@@ -92,8 +223,15 @@ impl<W: Write> Runner<W> {
 
     #[inline]
     fn run_load(&self, opts: Options) -> Result<()> {
-        let _ = self.load_config(opts.cfg_filepath)?;
-        unimplemented!();
+        let cfg_path = opts
+            .cfg_filepath
+            .unwrap_or_else(|| PathBuf::from("denv.yml"));
+        let cfg = self.cfg_loader.load(&cfg_path).map_err(Error::Config)?;
+        let fs = (self.create_fs_fn)();
+        let fs = fs.as_ref();
+        let env_path = fs.ensure_env_dir().map_err(Error::Io)?;
+        self.install_softwares(&env_path, cfg.soft_defs, fs)?;
+        self.print_export_statements(&env_path, &cfg_path, cfg.var_defs, fs)
     }
 }
 
@@ -102,6 +240,8 @@ impl Default for Runner<Stdout> {
         Self {
             args_fn: Box::new(|| env::args().collect()),
             cfg_loader: Box::new(DefaultConfigLoader),
+            create_fs_fn: Box::new(|| Box::new(DefaultFileSystem)),
+            env_var_fn: Box::new(|var_name| env::var(var_name)),
             out: Mutex::new(io::stdout()),
         }
     }
@@ -114,6 +254,18 @@ mod error_test {
     use super::*;
 
     mod to_string {
+        use super::*;
+
+        mod compute {
+            use super::*;
+
+            #[test]
+            fn should_return_str() {
+                let str = "Unable to compute value of some variables";
+                let err = Error::Compute(vec![]);
+                assert_eq!(err.to_string(), str);
+            }
+        }
 
         mod config {
             use super::*;
@@ -126,7 +278,17 @@ mod error_test {
                 assert_eq!(err.to_string(), str);
             }
         }
-        use super::*;
+
+        mod install {
+            use super::*;
+
+            #[test]
+            fn should_return_str() {
+                let str = "Unable to install some softwares";
+                let err = Error::Install(vec![]);
+                assert_eq!(err.to_string(), str);
+            }
+        }
 
         mod io {
             use super::*;
@@ -147,11 +309,13 @@ mod runner_test {
     use super::*;
     use crate::{
         cfg::{
-            SoftwareDefinition, SoftwareDefinitionKind, StubConfigLoader, VarDefinition,
+            Config, SoftwareDefinition, SoftwareDefinitionKind, StubConfigLoader, VarDefinition,
             VarDefinitionKind,
         },
+        fs::StubFileSystem,
         test::WriteFailer,
     };
+    use std::path::Path;
 
     mod run {
         use super::*;
@@ -222,6 +386,8 @@ mod runner_test {
                 let runner = Runner {
                     args_fn: Box::new(move || args.clone()),
                     cfg_loader: Box::new(StubConfigLoader::default()),
+                    create_fs_fn: Box::new(|| Box::new(StubFileSystem::default())),
+                    env_var_fn: Box::new(|var_name| env::var(var_name)),
                     out: Mutex::new(out),
                 };
                 let res = runner.run(Command::Hook(shell), Options::default());
@@ -246,6 +412,7 @@ mod runner_test {
 
             struct Data {
                 cfg: Config,
+                cfg_path: &'static Path,
                 opts: Options,
             }
 
@@ -253,7 +420,6 @@ mod runner_test {
                 fn default() -> Self {
                     Self {
                         cfg: Config {
-                            path: PathBuf::from("/config"),
                             soft_defs: vec![SoftwareDefinition {
                                 kind: SoftwareDefinitionKind::Terraform,
                                 version: "1.2.3".into(),
@@ -263,6 +429,7 @@ mod runner_test {
                                 name: "var".into(),
                             }],
                         },
+                        cfg_path: Path::new("/config"),
                         opts: Options {
                             cfg_filepath: Some(PathBuf::from("/config")),
                             ..Options::default()
@@ -273,14 +440,18 @@ mod runner_test {
 
             struct Stubs {
                 cfg_loader: StubConfigLoader,
+                create_fs_fn: Box<CreateFsFn>,
+                env_var_fn: Box<EnvVarFn>,
             }
 
             impl Stubs {
                 fn new(data: &Data) -> Self {
                     let cfg = data.cfg.clone();
-                    let cfg_path = cfg.path.clone();
+                    let cfg_path = data.cfg_path;
                     let mut stubs = Self {
                         cfg_loader: StubConfigLoader::default(),
+                        create_fs_fn: Box::new(|| Box::new(StubFileSystem::default())),
+                        env_var_fn: Box::new(|var_name| env::var(var_name)),
                     };
                     stubs.cfg_loader.with_load_fn(move |path| {
                         assert_eq!(path, cfg_path);
@@ -313,6 +484,8 @@ mod runner_test {
                 let runner = Runner {
                     args_fn: Box::new(|| env::args().collect()),
                     cfg_loader: Box::new(stubs.cfg_loader),
+                    create_fs_fn: stubs.create_fs_fn,
+                    env_var_fn: stubs.env_var_fn,
                     out: Mutex::new(out),
                 };
                 let res = runner.run(Command::Load, opts);
