@@ -1,5 +1,8 @@
 // IMPORTS
 
+#[cfg(test)]
+use stub_trait::stub;
+
 // TYPES
 
 pub type Result = std::result::Result<String, Error>;
@@ -7,7 +10,10 @@ pub type Result = std::result::Result<String, Error>;
 // ENUMS
 
 #[derive(Debug)]
-pub enum Error {}
+pub enum Error {
+    #[cfg(test)]
+    Stub,
+}
 
 pub enum Kind<'a> {
     Literal(&'a Literal),
@@ -15,10 +21,11 @@ pub enum Kind<'a> {
 
 // TRAITS
 
+#[cfg_attr(test, stub)]
 pub trait Var {
     fn compute_value(&self) -> Result;
 
-    fn kind(&self) -> Kind;
+    fn kind(&self) -> Kind<'_>;
 
     fn name(&self) -> &str;
 }

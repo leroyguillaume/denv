@@ -38,6 +38,10 @@ type ArgsFn = dyn Fn() -> Vec<String>;
 
 type CreateFsFn = dyn Fn() -> Box<dyn FileSystem>;
 
+type ConvertSoftFn = dyn Fn(SoftwareDefinition) -> Box<dyn Software>;
+
+type ConvertVarFn = dyn Fn(VarDefinition) -> Box<dyn Var>;
+
 type EnvVarFn = dyn Fn(&str) -> std::result::Result<String, env::VarError>;
 
 // CONSTS
@@ -102,6 +106,8 @@ impl Debug for InstallError {
 pub struct Runner<W: Write> {
     args_fn: Box<ArgsFn>,
     cfg_loader: Box<dyn ConfigLoader>,
+    convert_soft_fn: Box<ConvertSoftFn>,
+    convert_var_fn: Box<ConvertVarFn>,
     create_fs_fn: Box<CreateFsFn>,
     env_var_fn: Box<EnvVarFn>,
     out: Mutex<W>,
@@ -124,7 +130,7 @@ impl<W: Write> Runner<W> {
     ) -> Result<()> {
         let mut install_errs = vec![];
         for soft_def in soft_defs {
-            let soft = soft_def.into_software();
+            let soft = (self.convert_soft_fn)(soft_def);
             let bin_paths = soft.binary_paths(fs);
             let install_res = if soft.is_installed(fs) {
                 debug!("{} v{} is already installed", soft.name(), soft.version());
@@ -183,7 +189,7 @@ impl<W: Write> Runner<W> {
         )?;
         let mut compute_errs = vec![];
         for var_def in var_defs {
-            let var = var_def.into_var();
+            let var = (self.convert_var_fn)(var_def);
             let var_name: String = var.name().into();
             let compute_res = var
                 .compute_value()
@@ -240,6 +246,8 @@ impl Default for Runner<Stdout> {
         Self {
             args_fn: Box::new(|| env::args().collect()),
             cfg_loader: Box::new(DefaultConfigLoader),
+            convert_soft_fn: Box::new(SoftwareDefinition::into_software),
+            convert_var_fn: Box::new(VarDefinition::into_var),
             create_fs_fn: Box::new(|| Box::new(DefaultFileSystem)),
             env_var_fn: Box::new(|var_name| env::var(var_name)),
             out: Mutex::new(io::stdout()),
@@ -313,7 +321,9 @@ mod runner_test {
             VarDefinitionKind,
         },
         fs::StubFileSystem,
+        soft::StubSoftware,
         test::WriteFailer,
+        var::StubVar,
     };
     use std::path::Path;
 
@@ -386,6 +396,8 @@ mod runner_test {
                 let runner = Runner {
                     args_fn: Box::new(move || args.clone()),
                     cfg_loader: Box::new(StubConfigLoader::default()),
+                    convert_soft_fn: Box::new(SoftwareDefinition::into_software),
+                    convert_var_fn: Box::new(VarDefinition::into_var),
                     create_fs_fn: Box::new(|| Box::new(StubFileSystem::default())),
                     env_var_fn: Box::new(|var_name| env::var(var_name)),
                     out: Mutex::new(out),
@@ -413,7 +425,15 @@ mod runner_test {
             struct Data {
                 cfg: Config,
                 cfg_path: &'static Path,
+                cwd: &'static Path,
+                env_dirpath: &'static Path,
                 opts: Options,
+                path_env_var_value: &'static str,
+                soft_bin_path: &'static Path,
+                soft_is_installed: bool,
+                soft_name: &'static str,
+                var_name: &'static str,
+                var_value: &'static str,
             }
 
             impl Default for Data {
@@ -430,16 +450,26 @@ mod runner_test {
                             }],
                         },
                         cfg_path: Path::new("/config"),
+                        cwd: Path::new("/cwd"),
+                        env_dirpath: Path::new("/env"),
                         opts: Options {
                             cfg_filepath: Some(PathBuf::from("/config")),
                             ..Options::default()
                         },
+                        path_env_var_value: "path",
+                        soft_bin_path: Path::new("/bin"),
+                        soft_is_installed: false,
+                        soft_name: "soft1",
+                        var_name: "var1",
+                        var_value: "value1",
                     }
                 }
             }
 
             struct Stubs {
                 cfg_loader: StubConfigLoader,
+                convert_soft_fn: Box<ConvertSoftFn>,
+                convert_var_fn: Box<ConvertVarFn>,
                 create_fs_fn: Box<CreateFsFn>,
                 env_var_fn: Box<EnvVarFn>,
             }
@@ -448,10 +478,33 @@ mod runner_test {
                 fn new(data: &Data) -> Self {
                     let cfg = data.cfg.clone();
                     let cfg_path = data.cfg_path;
+                    let cwd = data.cwd;
+                    let env_dirpath = data.env_dirpath;
+                    let expected_soft_def = cfg.soft_defs[0].clone();
+                    let path_env_var_value = data.path_env_var_value;
+                    let soft_bin_path = data.soft_bin_path;
+                    let soft_is_installed = data.soft_is_installed;
+                    let soft_name = data.soft_name;
+                    let expected_var_def = cfg.var_defs[0].clone();
+                    let var_name = data.var_name;
+                    let var_value = data.var_value;
                     let mut stubs = Self {
                         cfg_loader: StubConfigLoader::default(),
-                        create_fs_fn: Box::new(|| Box::new(StubFileSystem::default())),
-                        env_var_fn: Box::new(|var_name| env::var(var_name)),
+                        convert_soft_fn: Box::new(move |soft_def| {
+                            assert_eq!(soft_def, expected_soft_def);
+                            Box::new(stub_software(soft_name, soft_is_installed, soft_bin_path))
+                        }),
+                        convert_var_fn: Box::new(move |var_def| {
+                            assert_eq!(var_def, expected_var_def);
+                            Box::new(stub_var(var_name, var_value))
+                        }),
+                        create_fs_fn: Box::new(|| {
+                            Box::new(stub_fs(cwd, env_dirpath, soft_bin_path))
+                        }),
+                        env_var_fn: Box::new(|var_name| match var_name {
+                            PATH_VAR_NAME => Ok(path_env_var_value.into()),
+                            _ => panic!("unexpected {}", var_name),
+                        }),
                     };
                     stubs.cfg_loader.with_load_fn(move |path| {
                         assert_eq!(path, cfg_path);
@@ -468,29 +521,243 @@ mod runner_test {
                 stubs
                     .cfg_loader
                     .with_load_fn(|_| Err(cfg::Error::Version(None)));
-                test(vec![], data.opts, stubs, |_, res| match res.unwrap_err() {
+                test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
                     Error::Config(_) => {}
                     err => panic!("{}", err),
                 });
             }
 
+            #[test]
+            fn should_return_io_err_if_ensure_env_dir_failed() {
+                let data = Data::default();
+                let mut stubs = Stubs::new(&data);
+                stubs.create_fs_fn = Box::new(|| {
+                    let mut fs = StubFileSystem::default();
+                    fs.with_ensure_env_dir_fn(|| {
+                        Err(io::Error::from(io::ErrorKind::PermissionDenied))
+                    });
+                    Box::new(fs)
+                });
+                test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
+                    Error::Io(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_install_err_if_install_failed() {
+                let data = Data::default();
+                let soft_bin_path = data.soft_bin_path;
+                let soft_is_installed = data.soft_is_installed;
+                let soft_name = data.soft_name;
+                let mut stubs = Stubs::new(&data);
+                stubs.convert_soft_fn = Box::new(move |_| {
+                    let mut soft = stub_software(soft_name, soft_is_installed, soft_bin_path);
+                    soft.with_install_fn(|_| Err(SoftwareError::Stub));
+                    Box::new(soft)
+                });
+                test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
+                    Error::Install(errs) => {
+                        assert_eq!(errs.len(), 1);
+                        let err = &errs[0];
+                        assert_eq!(err.soft.name(), data.soft_name);
+                        match err.cause {
+                            SoftwareError::Stub => {}
+                        }
+                    }
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_io_err_if_ensure_symlink_failed() {
+                let data = Data::default();
+                let cwd = data.cwd;
+                let env_dirpath = data.env_dirpath;
+                let soft_bin_path = data.soft_bin_path;
+                let mut stubs = Stubs::new(&data);
+                stubs.create_fs_fn = Box::new(|| {
+                    let mut fs = stub_fs(cwd, env_dirpath, soft_bin_path);
+                    fs.with_ensure_symlink_fn(|_, _| {
+                        Err(io::Error::from(io::ErrorKind::PermissionDenied))
+                    });
+                    Box::new(fs)
+                });
+                test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
+                    Error::Io(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_io_err_if_cwd_failed() {
+                let data = Data::default();
+                let cwd = data.cwd;
+                let env_dirpath = data.env_dirpath;
+                let soft_bin_path = data.soft_bin_path;
+                let mut stubs = Stubs::new(&data);
+                stubs.create_fs_fn = Box::new(|| {
+                    let mut fs = stub_fs(cwd, env_dirpath, soft_bin_path);
+                    fs.with_cwd_fn(|| Err(io::Error::from(io::ErrorKind::PermissionDenied)));
+                    Box::new(fs)
+                });
+                test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
+                    Error::Io(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_io_err_if_write_on_output_failed() {
+                let data = Data::default();
+                let stubs = Stubs::new(&data);
+                test(WriteFailer, &data.opts, stubs, |_, res| {
+                    match res.unwrap_err() {
+                        Error::Io(_) => {}
+                        err => panic!("{}", err),
+                    }
+                });
+            }
+
+            #[test]
+            fn should_return_install_err_if_compute_failed() {
+                let data = Data::default();
+                let var_name = data.var_name;
+                let var_value = data.var_value;
+                let mut stubs = Stubs::new(&data);
+                stubs.convert_var_fn = Box::new(|_| {
+                    let mut var = stub_var(var_name, var_value);
+                    var.with_compute_value_fn(|| Err(VarError::Stub));
+                    Box::new(var)
+                });
+                test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
+                    Error::Compute(errs) => {
+                        assert_eq!(errs.len(), 1);
+                        let err = &errs[0];
+                        assert_eq!(err.var.name(), data.var_name);
+                        match err.cause {
+                            VarError::Stub => {}
+                        }
+                    }
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_install_ok_with_opts() {
+                let data = Data::default();
+                let stubs = Stubs::new(&data);
+                test(vec![], &data.opts, stubs, |out, res| {
+                    verify(&data, out, res);
+                });
+            }
+
+            #[test]
+            fn should_return_install_ok_without_opts() {
+                let data = Data {
+                    cfg_path: Path::new("denv.yml"),
+                    opts: Options::default(),
+                    ..Data::default()
+                };
+                let stubs = Stubs::new(&data);
+                test(vec![], &data.opts, stubs, |out, res| {
+                    verify(&data, out, res);
+                });
+            }
+
+            #[test]
+            fn should_return_install_ok_soft_already_installed() {
+                let data = Data {
+                    soft_is_installed: true,
+                    ..Data::default()
+                };
+                let stubs = Stubs::new(&data);
+                test(vec![], &data.opts, stubs, |out, res| {
+                    verify(&data, out, res);
+                });
+            }
+
+            #[inline]
+            fn stub_fs(
+                cwd: &'static Path,
+                env_dirpath: &'static Path,
+                soft_bin_path: &'static Path,
+            ) -> StubFileSystem {
+                let mut fs = StubFileSystem::default();
+                fs.with_cwd_fn(|| Ok(cwd.to_path_buf()));
+                fs.with_ensure_env_dir_fn(|| Ok(env_dirpath.to_path_buf()));
+                fs.with_ensure_symlink_fn(move |src, dest| {
+                    assert_eq!(src, soft_bin_path);
+                    assert_eq!(dest, env_dirpath.join(soft_bin_path.file_name().unwrap()));
+                    Ok(())
+                });
+                fs
+            }
+
+            #[inline]
+            fn stub_software(
+                name: &'static str,
+                is_installed: bool,
+                soft_bin_path: &'static Path,
+            ) -> StubSoftware {
+                let mut soft = StubSoftware::default();
+                soft.with_binary_paths_fn(|_| vec![soft_bin_path.to_path_buf()]);
+                if !is_installed {
+                    soft.with_install_fn(|_| Ok(()));
+                }
+                soft.with_is_installed_fn(move |_| is_installed);
+                soft.with_name_fn(move || name);
+                soft
+            }
+
+            #[inline]
+            fn stub_var(name: &'static str, value: &'static str) -> StubVar {
+                let mut var = StubVar::default();
+                var.with_compute_value_fn(|| Ok(value.into()));
+                var.with_name_fn(move || name);
+                var
+            }
+
             #[inline]
             fn test<W: Write, F: Fn(W, Result<()>)>(
                 out: W,
-                opts: Options,
+                opts: &Options,
                 stubs: Stubs,
                 assert_fn: F,
             ) {
                 let runner = Runner {
                     args_fn: Box::new(|| env::args().collect()),
                     cfg_loader: Box::new(stubs.cfg_loader),
+                    convert_soft_fn: stubs.convert_soft_fn,
+                    convert_var_fn: stubs.convert_var_fn,
                     create_fs_fn: stubs.create_fs_fn,
                     env_var_fn: stubs.env_var_fn,
                     out: Mutex::new(out),
                 };
-                let res = runner.run(Command::Load, opts);
+                let res = runner.run(Command::Load, opts.clone());
                 let out = runner.out.into_inner().unwrap();
                 assert_fn(out, res);
+            }
+
+            #[inline]
+            fn verify(data: &Data, out: Vec<u8>, res: Result<()>) {
+                let expected_out = format!(
+                    "export {}='{}'\nexport {}='{}'\nexport {}='{}'\nexport {}=\"{}:${{{}}}\"\nexport {}='{}'\n",
+                    DENV_CWD_VAR_NAME,
+                    data.cwd.display(),
+                    DENV_CFG_FILE_VAR_NAME,
+                    data.cfg_path.display(),
+                    DENV_PATH_BACKUP_VAR_NAME,
+                    data.path_env_var_value,
+                    PATH_VAR_NAME,
+                    data.env_dirpath.display(),
+                    PATH_VAR_NAME,
+                    data.var_name,
+                    data.var_value,
+                );
+                res.unwrap();
+                let out = String::from_utf8(out).unwrap();
+                assert_eq!(out, expected_out);
             }
         }
     }
