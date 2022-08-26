@@ -13,6 +13,9 @@ pub enum Command {
 
     #[clap(about = "Print shell export statements")]
     Load,
+
+    #[clap(about = "Print shell unset statements")]
+    Unload,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Subcommand)]

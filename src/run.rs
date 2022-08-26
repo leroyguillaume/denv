@@ -57,6 +57,7 @@ const PATH_VAR_NAME: &str = "PATH";
 pub enum Error {
     Compute(Vec<ComputeError>),
     Config(cfg::Error),
+    EnvNotLoaded(env::VarError),
     Install(Vec<InstallError>),
     Io(io::Error),
 }
@@ -66,6 +67,7 @@ impl Display for Error {
         match self {
             Self::Compute(_) => std::write!(f, "Unable to compute value of some variables"),
             Self::Config(err) => std::write!(f, "Unable to load configuration: {}", err),
+            Self::EnvNotLoaded(_) => std::write!(f, "No environment loaded"),
             Self::Install(_) => std::write!(f, "Unable to install some softwares"),
             Self::Io(err) => std::write!(f, "{}", err),
         }
@@ -118,6 +120,7 @@ impl<W: Write> Runner<W> {
         match cmd {
             Command::Hook(shell) => self.run_hook(shell),
             Command::Load => self.run_load(opts),
+            Command::Unload => self.run_unload(),
         }
     }
 
@@ -235,9 +238,33 @@ impl<W: Write> Runner<W> {
         let fs = (self.create_fs_fn)();
         let fs = fs.as_ref();
         let cwd = fs.cwd().map_err(Error::Io)?;
-        let env_path = fs.ensure_env_dir(&cwd).map_err(Error::Io)?;
+        let env_path = fs.ensure_env_dir_is_present(&cwd).map_err(Error::Io)?;
         self.install_softwares(&env_path, cfg.soft_defs, fs)?;
         self.print_export_statements(&cwd, &env_path, &cfg_path, cfg.var_defs)
+    }
+
+    #[inline]
+    fn run_unload(&self) -> Result<()> {
+        let cfg_path = (self.env_var_fn)(DENV_CFG_FILE_VAR_NAME)
+            .map(PathBuf::from)
+            .map_err(Error::EnvNotLoaded)?;
+        let cfg = self.cfg_loader.load(&cfg_path).map_err(Error::Config)?;
+        let fs = (self.create_fs_fn)();
+        let fs = fs.as_ref();
+        let cwd = fs.cwd().map_err(Error::Io)?;
+        let mut out = self.out.lock().unwrap();
+        writeln!(
+            out,
+            "export {}='{}'",
+            PATH_VAR_NAME, DENV_PATH_BACKUP_VAR_NAME
+        )?;
+        writeln!(out, "unset {}", DENV_CWD_VAR_NAME)?;
+        writeln!(out, "unset {}", DENV_CFG_FILE_VAR_NAME)?;
+        writeln!(out, "unset {}", DENV_PATH_BACKUP_VAR_NAME)?;
+        for var_def in cfg.var_defs {
+            writeln!(out, "unset {}", var_def.name)?;
+        }
+        fs.ensure_env_dir_is_absent(&cwd).map_err(Error::Io)
     }
 }
 
@@ -283,6 +310,17 @@ mod error_test {
                 let err = cfg::Error::Version(None);
                 let str = format!("Unable to load configuration: {}", err);
                 let err = Error::Config(err);
+                assert_eq!(err.to_string(), str);
+            }
+        }
+
+        mod env_not_loaded {
+            use super::*;
+
+            #[test]
+            fn should_return_str() {
+                let str = "No environment loaded";
+                let err = Error::EnvNotLoaded(env::VarError::NotPresent);
                 assert_eq!(err.to_string(), str);
             }
         }
@@ -546,7 +584,7 @@ mod runner_test {
             }
 
             #[test]
-            fn should_return_io_err_if_ensure_env_dir_failed() {
+            fn should_return_io_err_if_ensure_env_dir_is_present_failed() {
                 let data = Data::default();
                 let cwd = data.cwd;
                 let env_dirpath = data.env_dirpath;
@@ -554,7 +592,7 @@ mod runner_test {
                 let mut stubs = Stubs::new(&data);
                 stubs.create_fs_fn = Box::new(|| {
                     let mut fs = stub_fs(cwd, env_dirpath, soft_bin_path);
-                    fs.stub_ensure_env_dir_fn(|_| {
+                    fs.stub_ensure_env_dir_is_present_fn(|_| {
                         Err(io::Error::from(io::ErrorKind::PermissionDenied))
                     });
                     Box::new(fs)
@@ -688,7 +726,7 @@ mod runner_test {
             ) -> StubFileSystem {
                 let mut fs = StubFileSystem::default();
                 fs.stub_cwd_fn(|| Ok(cwd.to_path_buf()));
-                fs.stub_ensure_env_dir_fn(move |project_dirpath| {
+                fs.stub_ensure_env_dir_is_present_fn(move |project_dirpath| {
                     assert_eq!(project_dirpath, cwd);
                     Ok(env_dirpath.to_path_buf())
                 });
@@ -760,6 +798,180 @@ mod runner_test {
                     PATH_VAR_NAME,
                     data.var_name,
                     data.var_value,
+                );
+                res.unwrap();
+                let out = String::from_utf8(out).unwrap();
+                assert_eq!(out, expected_out);
+            }
+        }
+
+        mod unload {
+            use super::*;
+
+            struct Data {
+                cfg: Config,
+                cfg_path: &'static str,
+                cwd: &'static Path,
+            }
+
+            impl Default for Data {
+                fn default() -> Self {
+                    Self {
+                        cfg: Config {
+                            soft_defs: vec![],
+                            var_defs: vec![VarDefinition {
+                                kind: VarDefinitionKind::Literal("value".into()),
+                                name: "var".into(),
+                            }],
+                        },
+                        cfg_path: "/config",
+                        cwd: Path::new("/cwd"),
+                    }
+                }
+            }
+
+            struct Stubs {
+                cfg_loader: StubConfigLoader,
+                create_fs_fn: Box<CreateFsFn>,
+                env_var_fn: Box<EnvVarFn>,
+            }
+
+            impl Stubs {
+                fn new(data: &Data) -> Self {
+                    let cfg = data.cfg.clone();
+                    let cfg_path = data.cfg_path;
+                    let cwd = data.cwd;
+                    let mut stubs = Self {
+                        cfg_loader: StubConfigLoader::default(),
+                        create_fs_fn: Box::new(|| Box::new(stub_fs(cwd))),
+                        env_var_fn: Box::new(|var_name| match var_name {
+                            DENV_CFG_FILE_VAR_NAME => Ok(cfg_path.into()),
+                            _ => panic!("unexpected {}", var_name),
+                        }),
+                    };
+                    stubs.cfg_loader.stub_load_fn(move |path| {
+                        assert_eq!(path, Path::new(cfg_path));
+                        Ok(cfg.clone())
+                    });
+                    stubs
+                }
+            }
+
+            #[test]
+            fn should_return_env_not_loaded_err() {
+                let data = Data::default();
+                let mut stubs = Stubs::new(&data);
+                stubs.env_var_fn = Box::new(|_| Err(env::VarError::NotPresent));
+                test(vec![], stubs, |_, res| match res.unwrap_err() {
+                    Error::EnvNotLoaded(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_config_err() {
+                let data = Data::default();
+                let mut stubs = Stubs::new(&data);
+                stubs
+                    .cfg_loader
+                    .stub_load_fn(|_| Err(cfg::Error::Version(None)));
+                test(vec![], stubs, |_, res| match res.unwrap_err() {
+                    Error::Config(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_io_err_if_cwd_failed() {
+                let data = Data::default();
+                let cwd = data.cwd;
+                let mut stubs = Stubs::new(&data);
+                stubs.create_fs_fn = Box::new(|| {
+                    let mut fs = stub_fs(cwd);
+                    fs.stub_cwd_fn(|| Err(io::Error::from(io::ErrorKind::PermissionDenied)));
+                    Box::new(fs)
+                });
+                test(vec![], stubs, |_, res| match res.unwrap_err() {
+                    Error::Io(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_io_err_if_write_on_output_failed() {
+                let data = Data::default();
+                let stubs = Stubs::new(&data);
+                test(WriteFailer, stubs, |_, res| match res.unwrap_err() {
+                    Error::Io(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_io_err_if_ensure_env_dir_is_absent_failed() {
+                let data = Data::default();
+                let cwd = data.cwd;
+                let mut stubs = Stubs::new(&data);
+                stubs.create_fs_fn = Box::new(|| {
+                    let mut fs = stub_fs(cwd);
+                    fs.stub_ensure_env_dir_is_absent_fn(|_| {
+                        Err(io::Error::from(io::ErrorKind::PermissionDenied))
+                    });
+                    Box::new(fs)
+                });
+                test(vec![], stubs, |_, res| match res.unwrap_err() {
+                    Error::Io(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_install_ok() {
+                let data = Data::default();
+                let stubs = Stubs::new(&data);
+                test(vec![], stubs, |out, res| {
+                    verify(&data, out, res);
+                });
+            }
+
+            #[inline]
+            fn stub_fs(cwd: &'static Path) -> StubFileSystem {
+                let mut fs = StubFileSystem::default();
+                fs.stub_cwd_fn(|| Ok(cwd.to_path_buf()));
+                fs.stub_ensure_env_dir_is_absent_fn(move |project_dirpath| {
+                    assert_eq!(project_dirpath, cwd);
+                    Ok(())
+                });
+                fs
+            }
+
+            #[inline]
+            fn test<W: Write, F: Fn(W, Result<()>)>(out: W, stubs: Stubs, assert_fn: F) {
+                let runner = Runner {
+                    args_fn: Box::new(|| env::args().collect()),
+                    cfg_loader: Box::new(stubs.cfg_loader),
+                    convert_soft_fn: Box::new(SoftwareDefinition::into_software),
+                    convert_var_fn: Box::new(VarDefinition::into_var),
+                    create_fs_fn: stubs.create_fs_fn,
+                    env_var_fn: stubs.env_var_fn,
+                    out: Mutex::new(out),
+                };
+                let opts = Options::default();
+                let res = runner.run(Command::Unload, opts);
+                let out = runner.out.into_inner().unwrap();
+                assert_fn(out, res);
+            }
+
+            #[inline]
+            fn verify(data: &Data, out: Vec<u8>, res: Result<()>) {
+                let expected_out = format!(
+                    "export {}='{}'\nunset {}\nunset {}\nunset {}\nunset {}\n",
+                    PATH_VAR_NAME,
+                    DENV_PATH_BACKUP_VAR_NAME,
+                    DENV_CWD_VAR_NAME,
+                    DENV_CFG_FILE_VAR_NAME,
+                    DENV_PATH_BACKUP_VAR_NAME,
+                    data.cfg.var_defs[0].name,
                 );
                 res.unwrap();
                 let out = String::from_utf8(out).unwrap();
