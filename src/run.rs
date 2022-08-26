@@ -160,12 +160,11 @@ impl<W: Write> Runner<W> {
     #[inline]
     fn print_export_statements(
         &self,
+        cwd: &Path,
         env_path: &Path,
         cfg_path: &Path,
         var_defs: Vec<VarDefinition>,
-        fs: &dyn FileSystem,
     ) -> Result<()> {
-        let cwd = fs.cwd().map_err(Error::Io)?;
         let mut out = self.out.lock().unwrap();
         writeln!(out, "export {}='{}'", DENV_CWD_VAR_NAME, cwd.display())?;
         writeln!(
@@ -235,9 +234,10 @@ impl<W: Write> Runner<W> {
         let cfg = self.cfg_loader.load(&cfg_path).map_err(Error::Config)?;
         let fs = (self.create_fs_fn)();
         let fs = fs.as_ref();
-        let env_path = fs.ensure_env_dir().map_err(Error::Io)?;
+        let cwd = fs.cwd().map_err(Error::Io)?;
+        let env_path = fs.ensure_env_dir(&cwd).map_err(Error::Io)?;
         self.install_softwares(&env_path, cfg.soft_defs, fs)?;
-        self.print_export_statements(&env_path, &cfg_path, cfg.var_defs, fs)
+        self.print_export_statements(&cwd, &env_path, &cfg_path, cfg.var_defs)
     }
 }
 
@@ -528,12 +528,33 @@ mod runner_test {
             }
 
             #[test]
-            fn should_return_io_err_if_ensure_env_dir_failed() {
+            fn should_return_io_err_if_cwd_failed() {
                 let data = Data::default();
+                let cwd = data.cwd;
+                let env_dirpath = data.env_dirpath;
+                let soft_bin_path = data.soft_bin_path;
                 let mut stubs = Stubs::new(&data);
                 stubs.create_fs_fn = Box::new(|| {
-                    let mut fs = StubFileSystem::default();
-                    fs.stub_ensure_env_dir_fn(|| {
+                    let mut fs = stub_fs(cwd, env_dirpath, soft_bin_path);
+                    fs.stub_cwd_fn(|| Err(io::Error::from(io::ErrorKind::PermissionDenied)));
+                    Box::new(fs)
+                });
+                test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
+                    Error::Io(_) => {}
+                    err => panic!("{}", err),
+                });
+            }
+
+            #[test]
+            fn should_return_io_err_if_ensure_env_dir_failed() {
+                let data = Data::default();
+                let cwd = data.cwd;
+                let env_dirpath = data.env_dirpath;
+                let soft_bin_path = data.soft_bin_path;
+                let mut stubs = Stubs::new(&data);
+                stubs.create_fs_fn = Box::new(|| {
+                    let mut fs = stub_fs(cwd, env_dirpath, soft_bin_path);
+                    fs.stub_ensure_env_dir_fn(|_| {
                         Err(io::Error::from(io::ErrorKind::PermissionDenied))
                     });
                     Box::new(fs)
@@ -581,24 +602,6 @@ mod runner_test {
                     fs.stub_ensure_symlink_fn(|_, _| {
                         Err(io::Error::from(io::ErrorKind::PermissionDenied))
                     });
-                    Box::new(fs)
-                });
-                test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
-                    Error::Io(_) => {}
-                    err => panic!("{}", err),
-                });
-            }
-
-            #[test]
-            fn should_return_io_err_if_cwd_failed() {
-                let data = Data::default();
-                let cwd = data.cwd;
-                let env_dirpath = data.env_dirpath;
-                let soft_bin_path = data.soft_bin_path;
-                let mut stubs = Stubs::new(&data);
-                stubs.create_fs_fn = Box::new(|| {
-                    let mut fs = stub_fs(cwd, env_dirpath, soft_bin_path);
-                    fs.stub_cwd_fn(|| Err(io::Error::from(io::ErrorKind::PermissionDenied)));
                     Box::new(fs)
                 });
                 test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
@@ -685,7 +688,10 @@ mod runner_test {
             ) -> StubFileSystem {
                 let mut fs = StubFileSystem::default();
                 fs.stub_cwd_fn(|| Ok(cwd.to_path_buf()));
-                fs.stub_ensure_env_dir_fn(|| Ok(env_dirpath.to_path_buf()));
+                fs.stub_ensure_env_dir_fn(move |project_dirpath| {
+                    assert_eq!(project_dirpath, cwd);
+                    Ok(env_dirpath.to_path_buf())
+                });
                 fs.stub_ensure_symlink_fn(move |src, dest| {
                     assert_eq!(src, soft_bin_path);
                     assert_eq!(dest, env_dirpath.join(soft_bin_path.file_name().unwrap()));

@@ -13,7 +13,7 @@ use stub_trait::stub;
 pub trait FileSystem {
     fn cwd(&self) -> Result<PathBuf>;
 
-    fn ensure_env_dir(&self) -> Result<PathBuf>;
+    fn ensure_env_dir(&self, project_dirpath: &Path) -> Result<PathBuf>;
 
     fn ensure_symlink(&self, src: &Path, dest: &Path) -> Result<()>;
 }
@@ -27,7 +27,7 @@ impl FileSystem for DefaultFileSystem {
         unimplemented!();
     }
 
-    fn ensure_env_dir(&self) -> Result<PathBuf> {
+    fn ensure_env_dir(&self, _project_dirpath: &Path) -> Result<PathBuf> {
         unimplemented!();
     }
 
