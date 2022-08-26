@@ -23,7 +23,7 @@ pub fn stub(_: TokenStream, input: TokenStream) -> TokenStream {
         if let TraitItem::Method(method) = item {
             let stub_method_name = &method.sig.ident;
             let attr_name = format_ident!("{}_fn", stub_method_name);
-            let with_method_name = format_ident!("with_{}", attr_name);
+            let with_method_name = format_ident!("stub_{}", attr_name);
             let mut args = method.sig.inputs.iter();
             let receiver = match args.next() {
                 Some(FnArg::Receiver(receiver)) => receiver,

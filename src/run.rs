@@ -506,7 +506,7 @@ mod runner_test {
                             _ => panic!("unexpected {}", var_name),
                         }),
                     };
-                    stubs.cfg_loader.with_load_fn(move |path| {
+                    stubs.cfg_loader.stub_load_fn(move |path| {
                         assert_eq!(path, cfg_path);
                         Ok(cfg.clone())
                     });
@@ -520,7 +520,7 @@ mod runner_test {
                 let mut stubs = Stubs::new(&data);
                 stubs
                     .cfg_loader
-                    .with_load_fn(|_| Err(cfg::Error::Version(None)));
+                    .stub_load_fn(|_| Err(cfg::Error::Version(None)));
                 test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
                     Error::Config(_) => {}
                     err => panic!("{}", err),
@@ -533,7 +533,7 @@ mod runner_test {
                 let mut stubs = Stubs::new(&data);
                 stubs.create_fs_fn = Box::new(|| {
                     let mut fs = StubFileSystem::default();
-                    fs.with_ensure_env_dir_fn(|| {
+                    fs.stub_ensure_env_dir_fn(|| {
                         Err(io::Error::from(io::ErrorKind::PermissionDenied))
                     });
                     Box::new(fs)
@@ -553,7 +553,7 @@ mod runner_test {
                 let mut stubs = Stubs::new(&data);
                 stubs.convert_soft_fn = Box::new(move |_| {
                     let mut soft = stub_software(soft_name, soft_is_installed, soft_bin_path);
-                    soft.with_install_fn(|_| Err(SoftwareError::Stub));
+                    soft.stub_install_fn(|_| Err(SoftwareError::Stub));
                     Box::new(soft)
                 });
                 test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
@@ -578,7 +578,7 @@ mod runner_test {
                 let mut stubs = Stubs::new(&data);
                 stubs.create_fs_fn = Box::new(|| {
                     let mut fs = stub_fs(cwd, env_dirpath, soft_bin_path);
-                    fs.with_ensure_symlink_fn(|_, _| {
+                    fs.stub_ensure_symlink_fn(|_, _| {
                         Err(io::Error::from(io::ErrorKind::PermissionDenied))
                     });
                     Box::new(fs)
@@ -598,7 +598,7 @@ mod runner_test {
                 let mut stubs = Stubs::new(&data);
                 stubs.create_fs_fn = Box::new(|| {
                     let mut fs = stub_fs(cwd, env_dirpath, soft_bin_path);
-                    fs.with_cwd_fn(|| Err(io::Error::from(io::ErrorKind::PermissionDenied)));
+                    fs.stub_cwd_fn(|| Err(io::Error::from(io::ErrorKind::PermissionDenied)));
                     Box::new(fs)
                 });
                 test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
@@ -627,7 +627,7 @@ mod runner_test {
                 let mut stubs = Stubs::new(&data);
                 stubs.convert_var_fn = Box::new(|_| {
                     let mut var = stub_var(var_name, var_value);
-                    var.with_compute_value_fn(|| Err(VarError::Stub));
+                    var.stub_compute_value_fn(|| Err(VarError::Stub));
                     Box::new(var)
                 });
                 test(vec![], &data.opts, stubs, |_, res| match res.unwrap_err() {
@@ -684,9 +684,9 @@ mod runner_test {
                 soft_bin_path: &'static Path,
             ) -> StubFileSystem {
                 let mut fs = StubFileSystem::default();
-                fs.with_cwd_fn(|| Ok(cwd.to_path_buf()));
-                fs.with_ensure_env_dir_fn(|| Ok(env_dirpath.to_path_buf()));
-                fs.with_ensure_symlink_fn(move |src, dest| {
+                fs.stub_cwd_fn(|| Ok(cwd.to_path_buf()));
+                fs.stub_ensure_env_dir_fn(|| Ok(env_dirpath.to_path_buf()));
+                fs.stub_ensure_symlink_fn(move |src, dest| {
                     assert_eq!(src, soft_bin_path);
                     assert_eq!(dest, env_dirpath.join(soft_bin_path.file_name().unwrap()));
                     Ok(())
@@ -701,20 +701,20 @@ mod runner_test {
                 soft_bin_path: &'static Path,
             ) -> StubSoftware {
                 let mut soft = StubSoftware::default();
-                soft.with_binary_paths_fn(|_| vec![soft_bin_path.to_path_buf()]);
+                soft.stub_binary_paths_fn(|_| vec![soft_bin_path.to_path_buf()]);
                 if !is_installed {
-                    soft.with_install_fn(|_| Ok(()));
+                    soft.stub_install_fn(|_| Ok(()));
                 }
-                soft.with_is_installed_fn(move |_| is_installed);
-                soft.with_name_fn(move || name);
+                soft.stub_is_installed_fn(move |_| is_installed);
+                soft.stub_name_fn(move || name);
                 soft
             }
 
             #[inline]
             fn stub_var(name: &'static str, value: &'static str) -> StubVar {
                 let mut var = StubVar::default();
-                var.with_compute_value_fn(|| Ok(value.into()));
-                var.with_name_fn(move || name);
+                var.stub_compute_value_fn(|| Ok(value.into()));
+                var.stub_name_fn(move || name);
                 var
             }
 
