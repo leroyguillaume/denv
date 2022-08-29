@@ -52,18 +52,24 @@ impl Software for ChartTesting {
         let env_dirpath = fs.ensure_env_dir(project_dirpath).map_err(Error::Io)?;
         let home_dirpath = fs.home_dirpath().map_err(Error::Io)?;
         let artifact = Artifact {
+            bin_filepaths: vec![Path::new(CT_BIN_NAME)],
             name: CT_SOFT_NAME,
             symlinks: vec![
                 Symlink {
                     dest: env_dirpath.join(CT_BIN_NAME),
+                    required: true,
                     src: Path::new(CT_BIN_NAME),
-            }, Symlink {
-                dest: home_dirpath.join(".ct/chart_schema.yaml"),
-                src: Path::new("etc/chart-schema.yaml"),
-            }, Symlink {
-                dest: home_dirpath.join(".ct/lintconf.yaml"),
-                src: Path::new("etc/lintconf.yaml"),
-            }
+                },
+                Symlink {
+                    dest: home_dirpath.join(".ct/chart_schema.yaml"),
+                    required: false,
+                    src: Path::new("etc/chart-schema.yaml"),
+                },
+                Symlink {
+                    dest: home_dirpath.join(".ct/lintconf.yaml"),
+                    required: false,
+                    src: Path::new("etc/lintconf.yaml"),
+                }
             ],
             url: format!(
                 "https://github.com/helm/chart-testing/releases/download/v{}/chart-testing_{}_{}_{}.tar.gz",
@@ -156,17 +162,23 @@ mod chart_testing_test {
                     .stub_home_dirpath_fn(|| Ok(home_dirpath.to_path_buf()));
                 stubs.installer.stub_install_targz_fn(move |artifact, _| {
                     let expected_artifact = Artifact {
+                        bin_filepaths: vec![Path::new(CT_BIN_NAME)],
                         name: CT_SOFT_NAME,
-                        symlinks: vec![Symlink {
-                            dest: env_dirpath.join(CT_BIN_NAME),
-                            src: Path::new(CT_BIN_NAME),
-                        }, Symlink {
-                            dest: home_dirpath.join(".ct/chart_schema.yaml"),
-                            src: Path::new("etc/chart-schema.yaml"),
-                        }, Symlink {
-                            dest: home_dirpath.join(".ct/lintconf.yaml"),
-                            src: Path::new("etc/lintconf.yaml"),
-                        }],
+                        symlinks: vec![
+                            Symlink {
+                                dest: env_dirpath.join(CT_BIN_NAME),
+                                required: true,
+                                src: Path::new(CT_BIN_NAME),
+                            }, Symlink {
+                                dest: home_dirpath.join(".ct/chart_schema.yaml"),
+                                required: false,
+                                src: Path::new("etc/chart-schema.yaml"),
+                            }, Symlink {
+                                dest: home_dirpath.join(".ct/lintconf.yaml"),
+                                required: false,
+                                src: Path::new("etc/lintconf.yaml"),
+                            }
+                        ],
                         url: format!(
                             "https://github.com/helm/chart-testing/releases/download/v{}/chart-testing_{}_{}_{}.tar.gz",
                             version, version, ChartTesting::os().unwrap(), ChartTesting::arch().unwrap(),

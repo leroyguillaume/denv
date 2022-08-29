@@ -54,9 +54,11 @@ impl Software for Terraform {
         let arch = Self::arch()?;
         let env_dirpath = fs.ensure_env_dir(project_dirpath).map_err(Error::Io)?;
         let artifact = Artifact {
+            bin_filepaths: vec![Path::new(TF_BIN_NAME)],
             name: TF_SOFT_NAME,
             symlinks: vec![Symlink {
                 dest: env_dirpath.join(TF_BIN_NAME),
+                required: true,
                 src: Path::new(TF_BIN_NAME),
             }],
             url: format!(
@@ -144,9 +146,11 @@ mod terraform_test {
                 });
                 stubs.installer.stub_install_zip_fn(move |artifact, _| {
                     let expected_artifact = Artifact {
+                        bin_filepaths: vec![Path::new(TF_BIN_NAME)],
                         name: TF_SOFT_NAME,
                         symlinks: vec![Symlink {
                             dest: env_dirpath.join(TF_BIN_NAME),
+                            required: true,
                             src: Path::new(TF_BIN_NAME),
                         }],
                         url: format!(

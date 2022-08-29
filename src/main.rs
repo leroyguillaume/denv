@@ -6,10 +6,12 @@ use run::Runner;
 
 // MODS
 
+mod archive;
 mod cfg;
 mod cli;
 mod fs;
 mod log;
+mod net;
 mod run;
 mod soft;
 #[cfg(test)]
