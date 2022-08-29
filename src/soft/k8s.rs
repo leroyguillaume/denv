@@ -49,9 +49,7 @@ impl ChartTesting {
 
 impl Software for ChartTesting {
     fn install(&self, project_dirpath: &Path, fs: &dyn FileSystem) -> Result<()> {
-        let env_dirpath = fs
-            .ensure_env_dir_is_present(project_dirpath)
-            .map_err(Error::Io)?;
+        let env_dirpath = fs.ensure_env_dir(project_dirpath).map_err(Error::Io)?;
         let home_dirpath = fs.home_dirpath().map_err(Error::Io)?;
         let artifact = Artifact {
             name: CT_SOFT_NAME,
@@ -149,12 +147,10 @@ mod chart_testing_test {
                     installer: StubArchiveArtifactInstaller::default(),
                     fs: StubFileSystem::default(),
                 };
-                stubs
-                    .fs
-                    .stub_ensure_env_dir_is_present_fn(move |project_dirpath| {
-                        assert_eq!(project_dirpath, expected_project_dirpath);
-                        Ok(env_dirpath.to_path_buf())
-                    });
+                stubs.fs.stub_ensure_env_dir_fn(move |project_dirpath| {
+                    assert_eq!(project_dirpath, expected_project_dirpath);
+                    Ok(env_dirpath.to_path_buf())
+                });
                 stubs
                     .fs
                     .stub_home_dirpath_fn(|| Ok(home_dirpath.to_path_buf()));
@@ -185,12 +181,12 @@ mod chart_testing_test {
         }
 
         #[test]
-        fn should_return_io_err_if_ensure_env_dir_is_present_failed() {
+        fn should_return_io_err_if_ensure_env_dir_failed() {
             let data = Data::default();
             let mut stubs = Stubs::new(&data);
-            stubs.fs.stub_ensure_env_dir_is_present_fn(|_| {
-                Err(io::Error::from(io::ErrorKind::PermissionDenied))
-            });
+            stubs
+                .fs
+                .stub_ensure_env_dir_fn(|_| Err(io::Error::from(io::ErrorKind::PermissionDenied)));
             test(&data, stubs, |res| match res.unwrap_err() {
                 Error::Io(_) => {}
                 err => panic!("{}", err),

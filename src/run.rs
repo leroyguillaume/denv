@@ -225,7 +225,7 @@ impl<W: Write> Runner<W> {
         let fs = (self.create_fs_fn)();
         let fs = fs.as_ref();
         let cwd = fs.cwd().map_err(Error::Io)?;
-        let env_dirpath = fs.ensure_env_dir_is_present(&cwd).map_err(Error::Io)?;
+        let env_dirpath = fs.ensure_env_dir(&cwd).map_err(Error::Io)?;
         self.install_softwares(&cwd, cfg.soft_defs, fs)?;
         self.print_export_statements(&cwd, &env_dirpath, &cfg_path, cfg.var_defs)
     }
@@ -251,7 +251,7 @@ impl<W: Write> Runner<W> {
         for var_def in cfg.var_defs {
             writeln!(out, "unset {}", var_def.name)?;
         }
-        fs.ensure_env_dir_is_absent(&cwd).map_err(Error::Io)
+        fs.delete_env_dir(&cwd).map_err(Error::Io)
     }
 }
 
@@ -562,14 +562,14 @@ mod runner_test {
             }
 
             #[test]
-            fn should_return_io_err_if_ensure_env_dir_is_present_failed() {
+            fn should_return_io_err_if_ensure_env_dir_failed() {
                 let data = Data::default();
                 let cwd = data.cwd;
                 let env_dirpath = data.env_dirpath;
                 let mut stubs = Stubs::new(&data);
                 stubs.create_fs_fn = Box::new(|| {
                     let mut fs = stub_fs(cwd, env_dirpath);
-                    fs.stub_ensure_env_dir_is_present_fn(|_| {
+                    fs.stub_ensure_env_dir_fn(|_| {
                         Err(io::Error::from(io::ErrorKind::PermissionDenied))
                     });
                     Box::new(fs)
@@ -667,7 +667,7 @@ mod runner_test {
             fn stub_fs(cwd: &'static Path, env_dirpath: &'static Path) -> StubFileSystem {
                 let mut fs = StubFileSystem::default();
                 fs.stub_cwd_fn(|| Ok(cwd.to_path_buf()));
-                fs.stub_ensure_env_dir_is_present_fn(move |project_dirpath| {
+                fs.stub_ensure_env_dir_fn(move |project_dirpath| {
                     assert_eq!(project_dirpath, cwd);
                     Ok(env_dirpath.to_path_buf())
                 });
@@ -839,13 +839,13 @@ mod runner_test {
             }
 
             #[test]
-            fn should_return_io_err_if_ensure_env_dir_is_absent_failed() {
+            fn should_return_io_err_if_delete_env_dir_failed() {
                 let data = Data::default();
                 let cwd = data.cwd;
                 let mut stubs = Stubs::new(&data);
                 stubs.create_fs_fn = Box::new(|| {
                     let mut fs = stub_fs(cwd);
-                    fs.stub_ensure_env_dir_is_absent_fn(|_| {
+                    fs.stub_delete_env_dir_fn(|_| {
                         Err(io::Error::from(io::ErrorKind::PermissionDenied))
                     });
                     Box::new(fs)
@@ -869,7 +869,7 @@ mod runner_test {
             fn stub_fs(cwd: &'static Path) -> StubFileSystem {
                 let mut fs = StubFileSystem::default();
                 fs.stub_cwd_fn(|| Ok(cwd.to_path_buf()));
-                fs.stub_ensure_env_dir_is_absent_fn(move |project_dirpath| {
+                fs.stub_delete_env_dir_fn(move |project_dirpath| {
                     assert_eq!(project_dirpath, cwd);
                     Ok(())
                 });
