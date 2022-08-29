@@ -1,7 +1,7 @@
 // IMPORTS
 
 use crate::{
-    soft::{tf::Terraform, Software},
+    soft::{k8s::ChartTesting, tf::Terraform, Software},
     var::{Literal, Var},
 };
 use jsonschema::JSONSchema;
@@ -63,6 +63,7 @@ impl Display for Error {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SoftwareDefinitionKind {
+    ChartTesting,
     Terraform,
 }
 
@@ -88,6 +89,7 @@ pub struct SoftwareDefinition {
 impl SoftwareDefinition {
     pub fn into_software(self) -> Box<dyn Software> {
         match self.kind {
+            SoftwareDefinitionKind::ChartTesting => Box::new(ChartTesting::new(self.version)),
             SoftwareDefinitionKind::Terraform => Box::new(Terraform::new(self.version)),
         }
     }
@@ -133,6 +135,12 @@ impl DefaultConfigLoader {
             var_defs: vec![],
         };
         if let Some(softs) = json.get("softwares") {
+            add_software_definition_if_present!(
+                "chart-testing",
+                SoftwareDefinitionKind::ChartTesting,
+                softs,
+                config
+            );
             add_software_definition_if_present!(
                 "terraform",
                 SoftwareDefinitionKind::Terraform,
@@ -257,9 +265,18 @@ mod software_definition {
         use super::*;
 
         #[test]
+        fn should_return_chart_testing() {
+            test(SoftwareDefinitionKind::ChartTesting, |kind| match kind {
+                Kind::ChartTesting(_) => {}
+                _ => panic!(),
+            });
+        }
+
+        #[test]
         fn should_return_terraform() {
             test(SoftwareDefinitionKind::Terraform, |kind| match kind {
                 Kind::Terraform(_) => {}
+                _ => panic!(),
             });
         }
 
@@ -364,10 +381,16 @@ mod default_config_loader_test {
             let path = Path::new("resources/test/config/v1.yml");
             test(path, |res| {
                 let cfg = Config {
-                    soft_defs: vec![SoftwareDefinition {
-                        kind: SoftwareDefinitionKind::Terraform,
-                        version: "1.2.3".into(),
-                    }],
+                    soft_defs: vec![
+                        SoftwareDefinition {
+                            kind: SoftwareDefinitionKind::ChartTesting,
+                            version: "3.7.0".into(),
+                        },
+                        SoftwareDefinition {
+                            kind: SoftwareDefinitionKind::Terraform,
+                            version: "1.2.3".into(),
+                        },
+                    ],
                     var_defs: vec![
                         VarDefinition {
                             kind: VarDefinitionKind::Literal("value".into()),

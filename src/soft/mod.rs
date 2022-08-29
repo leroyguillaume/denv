@@ -1,6 +1,7 @@
 // IMPORTS
 
 use crate::fs::FileSystem;
+use k8s::ChartTesting;
 use std::{
     fmt::{self, Display, Formatter},
     io,
@@ -12,8 +13,10 @@ use tf::Terraform;
 
 // MODS
 
-mod installer;
+pub mod k8s;
 pub mod tf;
+
+mod installer;
 
 // TYPES
 
@@ -37,6 +40,7 @@ impl Display for Error {
 }
 
 pub enum Kind<'a> {
+    ChartTesting(&'a ChartTesting),
     Terraform(&'a Terraform),
 }
 

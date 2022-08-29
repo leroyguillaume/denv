@@ -18,6 +18,8 @@ pub trait FileSystem {
     fn ensure_env_dir_is_present(&self, project_dirpath: &Path) -> Result<PathBuf>;
 
     fn ensure_symlink(&self, src: &Path, dest: &Path) -> Result<()>;
+
+    fn home_dirpath(&self) -> Result<PathBuf>;
 }
 
 // STRUCTS
@@ -38,6 +40,10 @@ impl FileSystem for DefaultFileSystem {
     }
 
     fn ensure_symlink(&self, _src: &Path, _dest: &Path) -> Result<()> {
+        unimplemented!();
+    }
+
+    fn home_dirpath(&self) -> Result<PathBuf> {
         unimplemented!();
     }
 }

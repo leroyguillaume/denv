@@ -1,5 +1,6 @@
 version: v1
 softwares:
+  chart-testing: 3.7.0
   terraform: 1.2.3
 set:
   - name: VAR_STR

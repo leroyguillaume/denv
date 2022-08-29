@@ -9,17 +9,17 @@ use std::{env, path::Path};
 
 // CONSTS
 
-const TF_BIN_NAME: &str = "terraform";
-const TF_SOFT_NAME: &str = "terraform";
+const CT_BIN_NAME: &str = "ct";
+const CT_SOFT_NAME: &str = "chart-testing";
 
 // STRUCTS
 
-pub struct Terraform {
+pub struct ChartTesting {
     installer: Box<dyn ArchiveArtifactInstaller>,
     version: String,
 }
 
-impl Terraform {
+impl ChartTesting {
     pub fn new(version: String) -> Self {
         Self {
             installer: Box::new(DefaultArchiveArtifactInstaller::default()),
@@ -30,9 +30,8 @@ impl Terraform {
     #[inline]
     fn arch() -> Result<&'static str> {
         match env::consts::ARCH {
-            "x86" => Ok("386"),
             "x86_64" => Ok("amd64"),
-            "arm" => Ok("arm"),
+            "arm" => Ok("armv6"),
             "aarch64" => Ok("arm64"),
             _ => Err(Error::UnsupportedSystem),
         }
@@ -48,34 +47,41 @@ impl Terraform {
     }
 }
 
-impl Software for Terraform {
+impl Software for ChartTesting {
     fn install(&self, project_dirpath: &Path, fs: &dyn FileSystem) -> Result<()> {
-        let os = Self::os()?;
-        let arch = Self::arch()?;
         let env_dirpath = fs
             .ensure_env_dir_is_present(project_dirpath)
             .map_err(Error::Io)?;
+        let home_dirpath = fs.home_dirpath().map_err(Error::Io)?;
         let artifact = Artifact {
-            name: TF_SOFT_NAME,
-            symlinks: vec![Symlink {
-                dest: env_dirpath.join(TF_BIN_NAME),
-                src: Path::new(TF_BIN_NAME),
-            }],
+            name: CT_SOFT_NAME,
+            symlinks: vec![
+                Symlink {
+                    dest: env_dirpath.join(CT_BIN_NAME),
+                    src: Path::new(CT_BIN_NAME),
+            }, Symlink {
+                dest: home_dirpath.join(".ct/chart_schema.yaml"),
+                src: Path::new("etc/chart-schema.yaml"),
+            }, Symlink {
+                dest: home_dirpath.join(".ct/lintconf.yaml"),
+                src: Path::new("etc/lintconf.yaml"),
+            }
+            ],
             url: format!(
-                "https://releases.hashicorp.com/terraform/{}/terraform_{}_{}_{}.zip",
-                self.version, self.version, os, arch,
+                "https://github.com/helm/chart-testing/releases/download/v{}/chart-testing_{}_{}_{}.tar.gz",
+                self.version, self.version, Self::os()?, Self::arch()?,
             ),
             version: &self.version,
         };
-        self.installer.install_zip(&artifact, fs)
+        self.installer.install_targz(&artifact, fs)
     }
 
     fn kind(&self) -> Kind {
-        Kind::Terraform(self)
+        Kind::ChartTesting(self)
     }
 
     fn name(&self) -> &str {
-        TF_SOFT_NAME
+        CT_SOFT_NAME
     }
 
     fn version(&self) -> &str {
@@ -86,7 +92,7 @@ impl Software for Terraform {
 // TESTS
 
 #[cfg(test)]
-mod terraform_test {
+mod chart_testing_test {
     use super::*;
     use crate::{fs::StubFileSystem, soft::installer::StubArchiveArtifactInstaller};
     use std::io;
@@ -96,12 +102,12 @@ mod terraform_test {
 
         #[test]
         fn should_return_soft() {
-            let version = "1.2.3";
-            let soft = Terraform::new(version.into());
-            assert_eq!(soft.name(), TF_SOFT_NAME);
+            let version = "3.7.0";
+            let soft = ChartTesting::new(version.into());
+            assert_eq!(soft.name(), CT_SOFT_NAME);
             assert_eq!(soft.version(), version);
             match soft.kind() {
-                Kind::Terraform(_) => {}
+                Kind::ChartTesting(_) => {}
                 _ => panic!(),
             }
         }
@@ -112,6 +118,7 @@ mod terraform_test {
 
         struct Data {
             env_dirpath: &'static Path,
+            home_dirpath: &'static Path,
             project_dirpath: &'static Path,
             version: &'static str,
         }
@@ -120,8 +127,9 @@ mod terraform_test {
             fn default() -> Self {
                 Self {
                     env_dirpath: Path::new("/env"),
+                    home_dirpath: Path::new("/home"),
                     project_dirpath: Path::new("/project"),
-                    version: "1.2.3",
+                    version: "3.7.0",
                 }
             }
         }
@@ -134,6 +142,7 @@ mod terraform_test {
         impl Stubs {
             fn new(data: &Data) -> Self {
                 let env_dirpath = data.env_dirpath;
+                let home_dirpath = data.home_dirpath;
                 let expected_project_dirpath = data.project_dirpath;
                 let version = data.version;
                 let mut stubs = Self {
@@ -146,19 +155,25 @@ mod terraform_test {
                         assert_eq!(project_dirpath, expected_project_dirpath);
                         Ok(env_dirpath.to_path_buf())
                     });
-                stubs.installer.stub_install_zip_fn(move |artifact, _| {
+                stubs
+                    .fs
+                    .stub_home_dirpath_fn(|| Ok(home_dirpath.to_path_buf()));
+                stubs.installer.stub_install_targz_fn(move |artifact, _| {
                     let expected_artifact = Artifact {
-                        name: TF_SOFT_NAME,
+                        name: CT_SOFT_NAME,
                         symlinks: vec![Symlink {
-                            dest: env_dirpath.join(TF_BIN_NAME),
-                            src: Path::new(TF_BIN_NAME),
+                            dest: env_dirpath.join(CT_BIN_NAME),
+                            src: Path::new(CT_BIN_NAME),
+                        }, Symlink {
+                            dest: home_dirpath.join(".ct/chart_schema.yaml"),
+                            src: Path::new("etc/chart-schema.yaml"),
+                        }, Symlink {
+                            dest: home_dirpath.join(".ct/lintconf.yaml"),
+                            src: Path::new("etc/lintconf.yaml"),
                         }],
                         url: format!(
-                            "https://releases.hashicorp.com/terraform/{}/terraform_{}_{}_{}.zip",
-                            version,
-                            version,
-                            Terraform::os().unwrap(),
-                            Terraform::arch().unwrap(),
+                            "https://github.com/helm/chart-testing/releases/download/v{}/chart-testing_{}_{}_{}.tar.gz",
+                            version, version, ChartTesting::os().unwrap(), ChartTesting::arch().unwrap(),
                         ),
                         version,
                     };
@@ -183,12 +198,25 @@ mod terraform_test {
         }
 
         #[test]
+        fn should_return_io_err_if_home_dirpath_failed() {
+            let data = Data::default();
+            let mut stubs = Stubs::new(&data);
+            stubs
+                .fs
+                .stub_home_dirpath_fn(|| Err(io::Error::from(io::ErrorKind::PermissionDenied)));
+            test(&data, stubs, |res| match res.unwrap_err() {
+                Error::Io(_) => {}
+                err => panic!("{}", err),
+            });
+        }
+
+        #[test]
         fn should_return_err_if_install_zip_failed() {
             let data = Data::default();
             let mut stubs = Stubs::new(&data);
             stubs
                 .installer
-                .stub_install_zip_fn(|_, _| Err(Error::UnsupportedSystem));
+                .stub_install_targz_fn(|_, _| Err(Error::UnsupportedSystem));
             test(&data, stubs, |res| match res.unwrap_err() {
                 Error::UnsupportedSystem => {}
                 err => panic!("{}", err),
@@ -206,7 +234,7 @@ mod terraform_test {
 
         #[inline]
         fn test<F: Fn(Result<()>)>(data: &Data, stubs: Stubs, assert_fn: F) {
-            let soft = Terraform {
+            let soft = ChartTesting {
                 installer: Box::new(stubs.installer),
                 version: data.version.into(),
             };
