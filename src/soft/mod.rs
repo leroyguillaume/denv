@@ -1,25 +1,39 @@
 // IMPORTS
 
 use crate::fs::FileSystem;
-use std::path::PathBuf;
+use std::{
+    fmt::{self, Display, Formatter},
+    io,
+    path::Path,
+};
 #[cfg(test)]
 use stub_trait::stub;
 use tf::Terraform;
 
 // MODS
 
+mod installer;
 pub mod tf;
 
 // TYPES
 
-pub type Result = std::result::Result<(), Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 // ENUMS
 
 #[derive(Debug)]
 pub enum Error {
-    #[cfg(test)]
-    Stub,
+    Io(io::Error),
+    UnsupportedSystem,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(err) => write!(f, "{}", err),
+            Self::UnsupportedSystem => write!(f, "This system is not supported"),
+        }
+    }
 }
 
 pub enum Kind<'a> {
@@ -30,15 +44,45 @@ pub enum Kind<'a> {
 
 #[cfg_attr(test, stub)]
 pub trait Software {
-    fn binary_paths(&self, fs: &dyn FileSystem) -> Vec<PathBuf>;
-
-    fn install(&self, fs: &dyn FileSystem) -> Result;
-
-    fn is_installed(&self, fs: &dyn FileSystem) -> bool;
+    fn install(&self, project_dirpath: &Path, fs: &dyn FileSystem) -> Result<()>;
 
     fn kind(&self) -> Kind<'_>;
 
     fn name(&self) -> &str;
 
     fn version(&self) -> &str;
+}
+
+// TESTS
+
+#[cfg(test)]
+mod error_test {
+    use super::*;
+
+    mod to_string {
+        use super::*;
+
+        mod unsupported_system {
+            use super::*;
+
+            #[test]
+            fn should_return_str() {
+                let str = "This system is not supported";
+                let err = Error::UnsupportedSystem;
+                assert_eq!(err.to_string(), str);
+            }
+        }
+
+        mod io {
+            use super::*;
+
+            #[test]
+            fn should_return_str() {
+                let err = ::std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+                let str = err.to_string();
+                let err = Error::Io(err);
+                assert_eq!(err.to_string(), str);
+            }
+        }
+    }
 }
