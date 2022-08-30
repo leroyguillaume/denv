@@ -52,7 +52,7 @@ pub struct Options {
     pub verbosity: Verbosity,
 }
 
-#[derive(Args, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Args, Clone, Debug, Eq, PartialEq)]
 pub struct Verbosity {
     #[clap(
         short = 'v',
@@ -68,6 +68,15 @@ pub struct Verbosity {
         conflicts_with = "count"
     )]
     pub quiet: bool,
+}
+
+impl Default for Verbosity {
+    fn default() -> Self {
+        Self {
+            count: 1,
+            quiet: false,
+        }
+    }
 }
 
 impl Verbosity {
@@ -147,6 +156,19 @@ mod verbosity_test {
                 quiet: false,
             };
             assert_eq!(verbosity.to_log_level(), LevelFilter::Trace);
+        }
+    }
+
+    mod default {
+        use super::*;
+
+        #[test]
+        fn should_return_verbosity() {
+            let verbosity = Verbosity {
+                count: 1,
+                quiet: false,
+            };
+            assert_eq!(Verbosity::default(), verbosity);
         }
     }
 }
