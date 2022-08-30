@@ -65,7 +65,7 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match self {
             Self::Compute(_) => std::write!(f, "Unable to compute value of some variables"),
-            Self::Config(err) => std::write!(f, "Unable to load configuration: {}", err),
+            Self::Config(err) => std::write!(f, "{}", err),
             Self::EnvNotLoaded(_) => std::write!(f, "No environment loaded"),
             Self::Install(_) => std::write!(f, "Unable to install some softwares"),
             Self::Io(err) => std::write!(f, "{}", err),
@@ -76,8 +76,8 @@ impl Display for Error {
 // STRUCTS
 
 pub struct ComputeError {
-    cause: VarError,
-    var: Box<dyn Var>,
+    pub cause: VarError,
+    pub var: Box<dyn Var>,
 }
 
 impl Debug for ComputeError {
@@ -90,8 +90,8 @@ impl Debug for ComputeError {
 }
 
 pub struct InstallError {
-    cause: SoftwareError,
-    soft: Box<dyn Software>,
+    pub cause: SoftwareError,
+    pub soft: Box<dyn Software>,
 }
 
 impl Debug for InstallError {
@@ -295,7 +295,7 @@ mod error_test {
             #[test]
             fn should_return_str() {
                 let err = cfg::Error::Version(None);
-                let str = format!("Unable to load configuration: {}", err);
+                let str = err.to_string();
                 let err = Error::Config(err);
                 assert_eq!(err.to_string(), str);
             }

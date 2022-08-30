@@ -1,5 +1,6 @@
 // IMPORTS
 
+use std::fmt::{self, Display, Formatter};
 #[cfg(test)]
 use stub_trait::stub;
 
@@ -13,6 +14,12 @@ pub type Result = std::result::Result<String, Error>;
 pub enum Error {
     #[cfg(test)]
     Stub,
+}
+
+impl Display for Error {
+    fn fmt(&self, _f: &mut Formatter<'_>) -> fmt::Result {
+        Ok(())
+    }
 }
 
 pub enum Kind<'a> {
