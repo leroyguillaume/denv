@@ -40,7 +40,7 @@ fn main() {
             Error::Config(err) => {
                 error!("Unable to load configuration");
                 match err {
-                    cfg::Error::Config(errs) => {
+                    cfg::Error::Invalid(errs) => {
                         for err in errs {
                             error!("{}", err);
                         }

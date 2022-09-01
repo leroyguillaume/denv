@@ -39,16 +39,16 @@ pub type Result = std::result::Result<Config, Error>;
 
 #[derive(Debug)]
 pub enum Error {
-    Config(Vec<String>),
+    Invalid(Vec<String>),
     Io(io::Error),
-    Version(Option<Value>),
-    YamlSyntax(serde_yaml::Error),
+    Version(Option<String>),
+    YamlSyntax(String),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Config(_) => write!(f, "Invalid configuration"),
+            Self::Invalid(_) => write!(f, "Invalid configuration"),
             Self::Io(err) => write!(f, "{}", err),
             Self::Version(version) => match version {
                 Some(version) => write!(f, "{} is not a valid configuration version", version),
@@ -127,7 +127,7 @@ impl DefaultConfigLoader {
         let schema: Value = serde_json::from_str(schema).unwrap();
         let schema = JSONSchema::compile(&schema).unwrap();
         if let Err(errs) = schema.validate(&json) {
-            let err = Error::Config(errs.map(|err| err.to_string()).collect());
+            let err = Error::Invalid(errs.map(|err| err.to_string()).collect());
             return Err(err);
         }
         let mut config = Config {
@@ -175,14 +175,15 @@ impl ConfigLoader for DefaultConfigLoader {
     fn load(&self, path: &Path) -> Result {
         debug!("Loading configuration from {}", path.display());
         let file = File::open(&path).map_err(Error::Io)?;
-        let json: Value = serde_yaml::from_reader(file).map_err(Error::YamlSyntax)?;
+        let json: Value =
+            serde_yaml::from_reader(file).map_err(|err| Error::YamlSyntax(err.to_string()))?;
         let json_version = json.get("version").ok_or(Error::Version(None))?;
         let version = json_version
             .as_str()
-            .ok_or_else(|| Error::Version(Some(json_version.clone())))?;
+            .ok_or_else(|| Error::Version(Some(json_version.to_string())))?;
         match version {
             "v1" => Self::load_v1(json),
-            _ => Err(Error::Version(Some(json_version.clone()))),
+            _ => Err(Error::Version(Some(json_version.to_string()))),
         }
     }
 }
@@ -196,13 +197,13 @@ mod error_test {
     mod to_string {
         use super::*;
 
-        mod config {
+        mod invalid {
             use super::*;
 
             #[test]
             fn should_return_str() {
                 let str = "Invalid configuration";
-                let err = Error::Config(vec![]);
+                let err = Error::Invalid(vec![]);
                 assert_eq!(err.to_string(), str);
             }
         }
@@ -235,7 +236,7 @@ mod error_test {
 
             #[test]
             fn should_return_str() {
-                let version = Value::from(1);
+                let version = Value::from(1).to_string();
                 let str = format!("{} is not a valid configuration version", version);
                 let err = Error::Version(Some(version));
                 assert_eq!(err.to_string(), str);
@@ -249,7 +250,7 @@ mod error_test {
             fn should_return_str() {
                 let err = serde_yaml::from_str::<Value>("{").unwrap_err();
                 let str = err.to_string();
-                let err = Error::YamlSyntax(err);
+                let err = Error::YamlSyntax(err.to_string());
                 assert_eq!(err.to_string(), str);
             }
         }
@@ -359,18 +360,20 @@ mod default_config_loader_test {
             test(
                 Path::new("resources/test/config/invalid-version.yml"),
                 |res| match res.unwrap_err() {
-                    Error::Version(version) => assert_eq!(version.unwrap(), Value::from(1)),
+                    Error::Version(version) => {
+                        assert_eq!(version.unwrap(), Value::from(1).to_string())
+                    }
                     err => panic!("{}", err),
                 },
             );
         }
 
         #[test]
-        fn should_return_config_err() {
+        fn should_return_invalid_err() {
             test(
                 Path::new("resources/test/config/invalid-v1.yml"),
                 |res| match res.unwrap_err() {
-                    Error::Config(errs) => assert_eq!(errs.len(), 3),
+                    Error::Invalid(errs) => assert_eq!(errs.len(), 3),
                     err => panic!("{}", err),
                 },
             );

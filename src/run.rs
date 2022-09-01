@@ -56,7 +56,7 @@ const PATH_VAR_NAME: &str = "PATH";
 pub enum Error {
     Compute(Vec<ComputeError>),
     Config(cfg::Error),
-    EnvNotLoaded(env::VarError),
+    EnvNotLoaded,
     Install(Vec<InstallError>),
     Io(io::Error),
 }
@@ -66,7 +66,7 @@ impl Display for Error {
         match self {
             Self::Compute(_) => std::write!(f, "Unable to compute value of some variables"),
             Self::Config(err) => std::write!(f, "{}", err),
-            Self::EnvNotLoaded(_) => std::write!(f, "No environment loaded"),
+            Self::EnvNotLoaded => std::write!(f, "No environment loaded"),
             Self::Install(_) => std::write!(f, "Unable to install some softwares"),
             Self::Io(err) => std::write!(f, "{}", err),
         }
@@ -234,7 +234,7 @@ impl<W: Write> Runner<W> {
     fn run_unload(&self) -> Result<()> {
         let cfg_path = (self.env_var_fn)(DENV_CFG_FILE_VAR_NAME)
             .map(PathBuf::from)
-            .map_err(Error::EnvNotLoaded)?;
+            .map_err(|_| Error::EnvNotLoaded)?;
         let cfg = self.cfg_loader.load(&cfg_path).map_err(Error::Config)?;
         let fs = (self.create_fs_fn)();
         let fs = fs.as_ref();
@@ -307,7 +307,7 @@ mod error_test {
             #[test]
             fn should_return_str() {
                 let str = "No environment loaded";
-                let err = Error::EnvNotLoaded(env::VarError::NotPresent);
+                let err = Error::EnvNotLoaded;
                 assert_eq!(err.to_string(), str);
             }
         }
@@ -794,7 +794,7 @@ mod runner_test {
                 let mut stubs = Stubs::new(&data);
                 stubs.env_var_fn = Box::new(|_| Err(env::VarError::NotPresent));
                 test(vec![], stubs, |_, res| match res.unwrap_err() {
-                    Error::EnvNotLoaded(_) => {}
+                    Error::EnvNotLoaded => {}
                     err => panic!("{}", err),
                 });
             }
